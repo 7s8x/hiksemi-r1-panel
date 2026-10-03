@@ -1,31 +1,27 @@
-# 海康 R1 前屏状态面板（稳定基线）
+# 海康 R1 前屏状态面板
 
-这是适配 R1 原生 376×960 DSI 屏幕的状态面板。每 15 秒读取 PVE 主机状态、CPU/NVMe/四块 SATA 盘的温度、内存、管理 IP，以及 VM 100/111 的运行状态。磁盘温度通过 `/dev/disk/by-id/` 序列号匹配 sysfs 设备，避免 `/dev/sdX` 改名导致显示串位。无 PVE/虚拟机电源操作或联网功能。
+2026-10-03 已实机验收：海康 R1 原生 376×960 DSI 前屏可显示 PVE 状态、CPU/NVMe/硬盘温度、内存、管理 IP 和 VM 100/111 状态。每 15 秒更新一次实时数据，不提供虚拟机电源控制或联网功能。
 
-当前 PVE 部署副本：`/root/r1-screen/r1_panel.py`，使用该目录的 `.venv/bin/python` 和系统现有的 `libcairo.so.2`；没有安装 Python 包。面板直接绘制到 `/dev/fb0`，不修改虚拟机和网络配置。
+## 触控与显示
 
-2026-10-02 触控试验：单击可按“状态面板（tty2）→ PVE 登录控制台（tty1）→ 黑屏 → 状态面板”循环。熄屏前清空 framebuffer 内容，再设置背光亮度 0 和 `bl_power=4`；这台机器仅设 `bl_power=4` 未能熄背光，仅把亮度设 0 仍可看见 LCD 残留文字。这里的“黑屏”不等于已确认 LCD 面板硬件完全断电。向上滑动调亮、向下滑动调暗，每档约为最大亮度的 5%，最低约 2%。结束时脚本恢复背光并切回 tty1；调节过的亮度值不自动恢复。
+- 左滑按“信息面板（tty2）→ PVE 控制台（tty1）→ 黑屏 → 信息面板”前进，右滑反向切换。
+- 上滑调亮、下滑调暗；单击已识别但当前不执行操作，留给后续功能。
+- 黑屏回信息面板时，先在暗屏下切换 tty、解除 framebuffer blank 并绘制缓存画面，最后恢复亮度；亮屏后再刷新实时数据。用户实测明显比旧版快，且没有控制台闪屏；试运行日志中的一次黑屏回面板切换约 0.87 秒。
+- “黑屏”是清空 framebuffer 并关闭背光，不代表已确认 LCD 硬件完全断电。
 
-2026-10-03 用户实测确认：单击循环和黑屏唤醒均正常，可以接受从黑屏回面板时短暂闪过 PVE 控制台。稳定版的关键修正是在进入面板时显式解除 `/sys/class/graphics/fb0/blank`，关屏时设置 blank=4，退出时恢复 blank=0；仅恢复背光不足以唤醒画面。当前运行临时单元 `r1-panel-touch-fbblank.service`，**未设置开机自启**。
+## 当前部署与回退
 
-已知限制：普通 framebuffer/VT 路线在黑屏唤醒时会短暂闪出控制台文字。此前尝试的 `KD_GRAPHICS` 和唤醒后延迟重绘版本均不稳定，不能作为此稳定基线的一部分。
-
-查看状态：
-
-```sh
-systemctl status r1-panel-touch-fbblank.service
-```
-
-提前结束（仅停止面板，不关闭或重启 PVE/虚拟机）：
+PVE 上当前运行的是临时服务 `r1-panel-optimized.service`，脚本为 `/root/r1-screen/r1_panel_develop.py`，使用 `/root/r1-screen/.venv/bin/python` 与系统的 `libcairo.so.2`。**未设置开机自启**；重启 PVE 后需重新核对实际状态。停止面板不影响 PVE 或虚拟机：
 
 ```sh
-systemctl stop r1-panel-touch-fbblank.service
+systemctl status r1-panel-optimized.service
+systemctl stop r1-panel-optimized.service
 ```
 
-触控屏设备是 `CST0836:00 0911:5288`，程序按名称定位 `/dev/input/event*`，不依赖易变的 event 编号。该输入设备的坐标范围为 376×960。若异常，用 SSH 停止上述临时单元，脚本会恢复 framebuffer、背光和 tty1。不要在未核对的情况下直通核显或改动 PVE 管理入口。
+旧稳定脚本 `/root/r1-screen/r1_panel.py` 保留未改，SHA-256 为 `1cf45791491472e4bd8bb5c7c69a9298ee92a3b54b1045a3e29d1b68f0605ed4`。需要回退时，先停止当前前屏服务，再运行旧脚本；不要同时运行两份触控程序，也不要通过重启 PVE/虚拟机修复前屏。旧代码另保存在 GitHub `stable-2026-10-03` 分支。
 
-## 从此私有仓库恢复
+## 私有仓库与本机配置
 
-仓库中的 `r1_panel.py` 与 2026-10-03 经实测的主机版本保持同一界面及触控逻辑；唯一差异是硬盘 `/dev/disk/by-id/` 标识从未追踪的 `drives.json` 读取，以避免提交本机硬盘序列号。原主机部署脚本 SHA-256 为 `1cf45791491472e4bd8bb5c7c69a9298ee92a3b54b1045a3e29d1b68f0605ed4`，目前仍在 PVE 上，未因本次归档而变更。没有 `drives.json` 时面板仍可运行，但不显示逐盘温度。
+GitHub `main` 为当前已验收版本，`develop` 用于下一阶段开发。仓库代码与 PVE 运行副本的触控和显示逻辑一致，但为了不上传本机硬盘序列号，仓库版从未追踪的 `drives.json` 读取硬盘 `/dev/disk/by-id/` 标识；PVE 运行副本仍内置这些标识。复制 `drives.example.json` 为 `drives.json`，逐项填写本机 `label` 与 `by_id`。没有此文件时面板可运行，但不显示逐盘温度。不要提交 `drives.json`。
 
-复制 `drives.example.json` 为同目录的 `drives.json`，把 `by_id` 改为本机 `ls -l /dev/disk/by-id/` 查到的完整磁盘标识；每项包含 `label` 和 `by_id`。`drives.json` 已被 `.gitignore` 排除，不应提交。主机端部署、服务启停和开机自启仍需逐项核对，不能把本仓库直接当成自动安装脚本执行。
+触控设备通过 `CST0836:00 0911:5288` 名称定位，不依赖易变的 event 编号。旧的 `KD_GRAPHICS` 试验曾造成画面卡住，当前版本未使用。前屏服务仍是临时单元；部署、开机自启和屏幕硬件控制须另行设计与验证。

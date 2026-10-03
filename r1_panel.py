@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only PVE status dashboard for the HIKSEMI R1 front framebuffer.
-
-No third-party Python packages, touch input, power controls, or network access.
-"""
+"""PVE status dashboard and local screen controls for the HIKSEMI R1."""
 
 import argparse
 import ctypes
@@ -33,6 +30,7 @@ def load_drives():
 
 DRIVES = load_drives()
 STOP = False
+SCREEN_STATES = ("panel", "console", "off")
 
 
 def stop(_signum, _frame):
@@ -205,7 +203,7 @@ class Painter:
             self.text(209, 833 + idx * 25, f"{vmid}  {status}", 13, (112, 213, 183) if status == "RUNNING" else fg, True)
         self.text(24, 918, f"{data['ip']}  /  UP {data['uptime'] // 3600}H {data['uptime'] % 3600 // 60}M", 15, muted)
         if touch_mode:
-            self.text(24, 942, f"TAP: PANEL > CONSOLE > OFF    SWIPE: {brightness}%", 9, muted)
+            self.text(24, 942, f"SWIPE L/R: VIEW    UP/DOWN: {brightness}%", 9, muted)
         else:
             self.text(24, 942, "DISPLAY ONLY  -  NO TOUCH ACTIONS", 10, muted)
         self.lib.cairo_surface_flush(self.surface)
@@ -256,7 +254,7 @@ def touchscreen_path():
 
 
 class TouchGesture:
-    """Recognize one-finger taps and vertical swipes from standard evdev events."""
+    """Recognize one-finger taps and horizontal/vertical swipes."""
 
     EVENT_SIZE = struct.calcsize("llHHi")
 
@@ -306,8 +304,10 @@ class TouchGesture:
                         sx, sy, started = self.start
                         dx, dy = self.x - sx, self.y - sy
                         duration = time.monotonic() - started
-                        if duration <= 1.5 and abs(dy) >= 80 and abs(dy) > abs(dx) * 1.3:
-                            gestures.append(("swipe", dy))
+                        if duration <= 1.5 and abs(dx) >= 80 and abs(dx) > abs(dy) * 1.3:
+                            gestures.append(("swipe_horizontal", dx))
+                        elif duration <= 1.5 and abs(dy) >= 80 and abs(dy) > abs(dx) * 1.3:
+                            gestures.append(("swipe_vertical", dy))
                         elif duration <= 0.9 and abs(dx) <= 35 and abs(dy) <= 35:
                             gestures.append(("tap", 0))
                     self.down = False
@@ -318,6 +318,12 @@ class TouchGesture:
 
 def switch_vt(number):
     subprocess.run(["chvt", str(number)], check=True, timeout=3)
+
+
+def shifted_state(current, horizontal_delta):
+    """Swipe left for the next view, right for the previous view."""
+    step = 1 if horizontal_delta < 0 else -1
+    return SCREEN_STATES[(SCREEN_STATES.index(current) + step) % len(SCREEN_STATES)]
 
 
 def run_touch(painter):
@@ -337,15 +343,50 @@ def run_touch(painter):
         gesture = TouchGesture()
         state = "panel"
         next_refresh = 0
+        last_data = None
         with mmap.mmap(fb_fd, line_length * HEIGHT, mmap.MAP_SHARED, mmap.PROT_WRITE) as framebuffer:
             def blit():
                 pixels, stride = painter.pixels()
                 for y in range(HEIGHT):
                     framebuffer[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
 
-            def refresh():
-                painter.draw(snapshot(), touch_mode=True, brightness=round(100 * brightness / maximum))
+            def refresh(use_cache=False):
+                nonlocal last_data
+                if use_cache and last_data is not None:
+                    data = dict(last_data)
+                    data["clock"] = time.strftime("%H:%M")
+                else:
+                    data = snapshot()
+                    last_data = data
+                painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum))
                 blit()
+
+            def show_panel():
+                # Keep the LCD dark while chvt/fbcon and fb_blank redraw the
+                # framebuffer. Reveal it only after our own frame is ready.
+                (backlight / "brightness").write_text("0")
+                switch_vt(2)
+                fb_blank.write_text("0")
+                (backlight / "bl_power").write_text("0")
+                time.sleep(0.12)
+                refresh(use_cache=True)
+                (backlight / "brightness").write_text(str(brightness))
+                blit()
+
+            def show_console():
+                switch_vt(1)
+                fb_blank.write_text("0")
+                (backlight / "bl_power").write_text("0")
+                (backlight / "brightness").write_text(str(brightness))
+
+            def show_off():
+                # Clear residual LCD pixels before blanking the display.
+                painter.rect(0, 0, WIDTH, HEIGHT, (0, 0, 0))
+                painter.lib.cairo_surface_flush(painter.surface)
+                blit()
+                (backlight / "brightness").write_text("0")
+                (backlight / "bl_power").write_text("4")
+                fb_blank.write_text("4")
 
             try:
                 fb_blank.write_text("0")
@@ -364,39 +405,29 @@ def run_touch(painter):
                         except BlockingIOError:
                             events = []
                         for action, value in events:
-                            if action == "swipe":
+                            if action == "swipe_vertical":
                                 increments = max(1, min(5, round(abs(value) / 100)))
                                 brightness = min(maximum, max(minimum, brightness + (step * increments if value < 0 else -step * increments)))
                                 if state != "off":
                                     (backlight / "brightness").write_text(str(brightness))
                                 if state == "panel":
-                                    refresh()
-                                print(f"gesture=swipe brightness={round(100 * brightness / maximum)}% state={state}", flush=True)
-                            elif state == "panel":
-                                state = "console"
-                                switch_vt(1)
-                                print("gesture=tap state=console", flush=True)
-                            elif state == "console":
-                                state = "off"
-                                # The R1 LCD can show the last console pixels even
-                                # when its backlight reports zero brightness.
-                                painter.rect(0, 0, WIDTH, HEIGHT, (0, 0, 0))
-                                painter.lib.cairo_surface_flush(painter.surface)
-                                blit()
-                                (backlight / "brightness").write_text("0")
-                                (backlight / "bl_power").write_text("4")
-                                fb_blank.write_text("4")
-                                print("gesture=tap state=off", flush=True)
-                            else:
-                                state = "panel"
-                                switch_vt(2)
-                                fb_blank.write_text("0")
-                                (backlight / "bl_power").write_text("0")
-                                (backlight / "brightness").write_text(str(brightness))
-                                time.sleep(0.35)
-                                refresh()
-                                next_refresh = time.monotonic() + 15
-                                print("gesture=tap state=panel", flush=True)
+                                    refresh(use_cache=True)
+                                print(f"gesture=swipe_vertical brightness={round(100 * brightness / maximum)}% state={state}", flush=True)
+                            elif action == "swipe_horizontal":
+                                transition_started = time.monotonic()
+                                target = shifted_state(state, value)
+                                if target == "panel":
+                                    show_panel()
+                                    next_refresh = time.monotonic() + 0.2
+                                elif target == "console":
+                                    show_console()
+                                else:
+                                    show_off()
+                                state = target
+                                elapsed_ms = round((time.monotonic() - transition_started) * 1000)
+                                print(f"gesture=swipe_horizontal direction={'left' if value < 0 else 'right'} state={state} transition_ms={elapsed_ms}", flush=True)
+                            elif action == "tap":
+                                print(f"gesture=tap reserved state={state}", flush=True)
                     if state == "panel" and time.monotonic() >= next_refresh:
                         refresh()
                         next_refresh = time.monotonic() + 15
