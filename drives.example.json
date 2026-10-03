@@ -1,0 +1,10 @@
+[
+  {
+    "label": "4T POOL 2",
+    "by_id": "ata-REPLACE_WITH_DISK_BY_ID"
+  },
+  {
+    "label": "SATA SSD",
+    "by_id": "ata-REPLACE_WITH_ANOTHER_DISK_BY_ID"
+  }
+]
