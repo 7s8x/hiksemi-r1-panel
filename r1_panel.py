@@ -343,14 +343,22 @@ def run_touch(painter):
         gesture = TouchGesture()
         state = "panel"
         next_refresh = 0
+        last_data = None
         with mmap.mmap(fb_fd, line_length * HEIGHT, mmap.MAP_SHARED, mmap.PROT_WRITE) as framebuffer:
             def blit():
                 pixels, stride = painter.pixels()
                 for y in range(HEIGHT):
                     framebuffer[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
 
-            def refresh():
-                painter.draw(snapshot(), touch_mode=True, brightness=round(100 * brightness / maximum))
+            def refresh(use_cache=False):
+                nonlocal last_data
+                if use_cache and last_data is not None:
+                    data = dict(last_data)
+                    data["clock"] = time.strftime("%H:%M")
+                else:
+                    data = snapshot()
+                    last_data = data
+                painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum))
                 blit()
 
             def show_panel():
@@ -361,7 +369,7 @@ def run_touch(painter):
                 fb_blank.write_text("0")
                 (backlight / "bl_power").write_text("0")
                 time.sleep(0.12)
-                refresh()
+                refresh(use_cache=True)
                 (backlight / "brightness").write_text(str(brightness))
                 blit()
 
@@ -403,19 +411,21 @@ def run_touch(painter):
                                 if state != "off":
                                     (backlight / "brightness").write_text(str(brightness))
                                 if state == "panel":
-                                    refresh()
+                                    refresh(use_cache=True)
                                 print(f"gesture=swipe_vertical brightness={round(100 * brightness / maximum)}% state={state}", flush=True)
                             elif action == "swipe_horizontal":
+                                transition_started = time.monotonic()
                                 target = shifted_state(state, value)
                                 if target == "panel":
                                     show_panel()
-                                    next_refresh = time.monotonic() + 15
+                                    next_refresh = time.monotonic() + 0.2
                                 elif target == "console":
                                     show_console()
                                 else:
                                     show_off()
                                 state = target
-                                print(f"gesture=swipe_horizontal direction={'left' if value < 0 else 'right'} state={state}", flush=True)
+                                elapsed_ms = round((time.monotonic() - transition_started) * 1000)
+                                print(f"gesture=swipe_horizontal direction={'left' if value < 0 else 'right'} state={state} transition_ms={elapsed_ms}", flush=True)
                             elif action == "tap":
                                 print(f"gesture=tap reserved state={state}", flush=True)
                     if state == "panel" and time.monotonic() >= next_refresh:
