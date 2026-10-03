@@ -1,0 +1,5 @@
+drives.json
+*.pyc
+__pycache__/
+preview*.png
+.venv/
