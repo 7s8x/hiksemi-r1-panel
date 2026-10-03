@@ -1,2 +1,31 @@
-# hiksemi-r1-panel
-HIKSEMI R1 front touchscreen dashboard for Proxmox VE
+# 海康 R1 前屏状态面板（稳定基线）
+
+这是适配 R1 原生 376×960 DSI 屏幕的状态面板。每 15 秒读取 PVE 主机状态、CPU/NVMe/四块 SATA 盘的温度、内存、管理 IP，以及 VM 100/111 的运行状态。磁盘温度通过 `/dev/disk/by-id/` 序列号匹配 sysfs 设备，避免 `/dev/sdX` 改名导致显示串位。无 PVE/虚拟机电源操作或联网功能。
+
+当前 PVE 部署副本：`/root/r1-screen/r1_panel.py`，使用该目录的 `.venv/bin/python` 和系统现有的 `libcairo.so.2`；没有安装 Python 包。面板直接绘制到 `/dev/fb0`，不修改虚拟机和网络配置。
+
+2026-10-02 触控试验：单击可按“状态面板（tty2）→ PVE 登录控制台（tty1）→ 黑屏 → 状态面板”循环。熄屏前清空 framebuffer 内容，再设置背光亮度 0 和 `bl_power=4`；这台机器仅设 `bl_power=4` 未能熄背光，仅把亮度设 0 仍可看见 LCD 残留文字。这里的“黑屏”不等于已确认 LCD 面板硬件完全断电。向上滑动调亮、向下滑动调暗，每档约为最大亮度的 5%，最低约 2%。结束时脚本恢复背光并切回 tty1；调节过的亮度值不自动恢复。
+
+2026-10-03 用户实测确认：单击循环和黑屏唤醒均正常，可以接受从黑屏回面板时短暂闪过 PVE 控制台。稳定版的关键修正是在进入面板时显式解除 `/sys/class/graphics/fb0/blank`，关屏时设置 blank=4，退出时恢复 blank=0；仅恢复背光不足以唤醒画面。当前运行临时单元 `r1-panel-touch-fbblank.service`，**未设置开机自启**。
+
+已知限制：普通 framebuffer/VT 路线在黑屏唤醒时会短暂闪出控制台文字。此前尝试的 `KD_GRAPHICS` 和唤醒后延迟重绘版本均不稳定，不能作为此稳定基线的一部分。
+
+查看状态：
+
+```sh
+systemctl status r1-panel-touch-fbblank.service
+```
+
+提前结束（仅停止面板，不关闭或重启 PVE/虚拟机）：
+
+```sh
+systemctl stop r1-panel-touch-fbblank.service
+```
+
+触控屏设备是 `CST0836:00 0911:5288`，程序按名称定位 `/dev/input/event*`，不依赖易变的 event 编号。该输入设备的坐标范围为 376×960。若异常，用 SSH 停止上述临时单元，脚本会恢复 framebuffer、背光和 tty1。不要在未核对的情况下直通核显或改动 PVE 管理入口。
+
+## 从此私有仓库恢复
+
+仓库中的 `r1_panel.py` 与 2026-10-03 经实测的主机版本保持同一界面及触控逻辑；唯一差异是硬盘 `/dev/disk/by-id/` 标识从未追踪的 `drives.json` 读取，以避免提交本机硬盘序列号。原主机部署脚本 SHA-256 为 `1cf45791491472e4bd8bb5c7c69a9298ee92a3b54b1045a3e29d1b68f0605ed4`，目前仍在 PVE 上，未因本次归档而变更。没有 `drives.json` 时面板仍可运行，但不显示逐盘温度。
+
+复制 `drives.example.json` 为同目录的 `drives.json`，把 `by_id` 改为本机 `ls -l /dev/disk/by-id/` 查到的完整磁盘标识；每项包含 `label` 和 `by_id`。`drives.json` 已被 `.gitignore` 排除，不应提交。主机端部署、服务启停和开机自启仍需逐项核对，不能把本仓库直接当成自动安装脚本执行。
