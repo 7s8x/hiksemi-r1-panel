@@ -1,27 +1,35 @@
-# 海康 R1 前屏状态面板
+# HIKSEMI R1 · PVE 前屏与硬件实验
 
-2026-10-03 已实机验收：海康 R1 原生 376×960 DSI 前屏可显示 PVE 状态、CPU/NVMe/硬盘温度、内存、管理 IP 和 VM 100/111 状态。每 15 秒更新一次实时数据，不提供虚拟机电源控制或联网功能。
+本私有仓库保存海康 R1 在 PVE 上的前屏、软件温控和 RGB 灯开关。`main` 与 `stable-2026-10-05-fan-rgb` 保存用户现场验收的稳定版；`develop` 保留为后续开发。旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。
 
-## 触控与显示
+## 当前功能与证据（2026-10-05）
 
-- 左滑按“信息面板（tty2）→ PVE 控制台（tty1）→ 黑屏 → 信息面板”前进，右滑反向切换。
-- 上滑调亮、下滑调暗；单击已识别但当前不执行操作，留给后续功能。
-- 黑屏回信息面板时，先在暗屏下切换 tty、解除 framebuffer blank 并绘制缓存画面，最后恢复亮度；亮屏后再刷新实时数据。用户实测明显比旧版快，且没有控制台闪屏；试运行日志中的一次黑屏回面板切换约 0.87 秒。
-- “黑屏”是清空 framebuffer 并关闭背光，不代表已确认 LCD 硬件完全断电。
+| 功能 | 已验证 | 尚未验证 |
+| --- | --- | --- |
+| 前屏总览 | 376×960 DSI、Cairo/framebuffer、15 秒刷新；左右滑切视图、上下滑调亮度，黑屏唤醒无控制台闪屏；`r1-panel.service` 常驻运行 | 整机重启后的自动恢复 |
+| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM 显示；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；实体按钮已验收 | 两路风扇的物理身份、长时间热循环及内核升级兼容性 |
+| RGB 开关 | 风扇页单击关灯/开灯，现场确认实体灯亮灭和恢复；只写 `i2c-0/0x26` 的模式寄存器 | Web 调色功能 |
 
-## 当前部署与回退
+PVE 已启用 `r1-panel.service` 与 `r1-fan-curve.service`，用户现场确认屏幕、风扇模式按钮和 RGB 开关可用。离线测试 34 项通过；未为了验证而重启 PVE。此仓库不包含驱动二进制、fnOS 安装包、私钥、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识，因此与 PVE 运行副本只有这一处主机配置差异。
 
-PVE 上当前运行的是临时服务 `r1-panel-optimized.service`，脚本为 `/root/r1-screen/r1_panel_develop.py`，使用 `/root/r1-screen/.venv/bin/python` 与系统的 `libcairo.so.2`。**未设置开机自启**；重启 PVE 后需重新核对实际状态。停止面板不影响 PVE 或虚拟机：
+## 文件
 
-```sh
-systemctl status r1-panel-optimized.service
-systemctl stop r1-panel-optimized.service
-```
+- `r1_panel_buttons.py`：当前稳定面板。由本机未跟踪的 `drives.json` 加载硬盘标识；缺失时仍可运行，只是不显示逐盘温度。`r1_panel.py` 是旧屏幕版，留作历史回退。
+- `r1_fan_curve.py` / `r1_fan_control_ipc.py`：保守软件温控与屏幕模式请求；风扇停转或传感器缺失时请求全速。
+- `r1-panel.service` / `r1-fan-curve.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
+- `r1_hardware.py` / `r1_hardware_probe.py`：早期只读硬件探测与离线计算，不属于常驻服务。
+- `r1_rgb_probe.py`：只对已知 `0x26` 地址定点读取，不扫整个 I²C 总线。
+- `r1_rgb_trial.py`：单台主机使用的短时 RGB 协议验证，原状态基线写死为 `(2,255,0,0)`；**不要在其他机器或状态改变后直接执行**。
+- `r1_rgb_control.py`：常驻面板使用的最小开关，仅切换模式并回读，不调整颜色。
+- `experiments/`：当次风扇通道验证、回退和采样脚本，含当次主机 PWM/背光基线；只作为历史复现资料，不是通用安装程序。
+- `tests/`：不接触真实硬件的手势、风扇读数、RGB 回退测试。
 
-旧稳定脚本 `/root/r1-screen/r1_panel.py` 保留未改，SHA-256 为 `1cf45791491472e4bd8bb5c7c69a9298ee92a3b54b1045a3e29d1b68f0605ed4`。需要回退时，先停止当前前屏服务，再运行旧脚本；不要同时运行两份触控程序，也不要通过重启 PVE/虚拟机修复前屏。旧代码另保存在 GitHub `stable-2026-10-03` 分支。
+不要提交 `drives.json`，可用 `drives.example.json` 作为格式参考。RGB 开关不控制风扇；温控服务独立于前屏运行。
 
-## 私有仓库与本机配置
+## 安全边界与回退
 
-GitHub `main` 为当前已验收版本，`develop` 用于下一阶段开发。仓库代码与 PVE 运行副本的触控和显示逻辑一致，但为了不上传本机硬盘序列号，仓库版从未追踪的 `drives.json` 读取硬盘 `/dev/disk/by-id/` 标识；PVE 运行副本仍内置这些标识。复制 `drives.example.json` 为 `drives.json`，逐项填写本机 `label` 与 `by_id`。没有此文件时面板可运行，但不显示逐盘温度。不要提交 `drives.json`。
+本项目没有把 R1 Toolbox 的 fnOS 包安装到 PVE，也没有复制其专有程序或强制 `force_id=0x8628`。本机识别到的芯片是 IT8613E；第三方 `it87` 驱动使用固定源码版本构建和哈希校验，二进制不在仓库内。内核升级后必须重新验证/构建，不能假定可直接复用。
 
-触控设备通过 `CST0836:00 0911:5288` 名称定位，不依赖易变的 event 编号。旧的 `KD_GRAPHICS` 试验曾造成画面卡住，当前版本未使用。前屏服务仍是临时单元；部署、开机自启和屏幕硬件控制须另行设计与验证。
+只停止前屏：`systemctl disable --now r1-panel.service`，确认控制台和背光恢复；这不会停止温控。若要回退旧屏幕版，先停当前服务，再从 `stable-2026-10-03-swipe-cache` 取旧代码。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
+
+离线验证：在项目虚拟环境内运行 `.venv/bin/python -m unittest discover -s tests -v`。驱动探测、I²C 写入和现场画面效果必须分别实测，单元测试不能替代硬件验证。
