@@ -1,0 +1,18 @@
+[Unit]
+Description=HIKSEMI R1 touch status panel
+After=local-fs.target systemd-logind.service r1-fan-curve.service
+ConditionPathExists=/dev/fb0
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh /root/r1-screen/r1_panel_preflight.sh
+ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_panel_buttons.py --touch --initial-view fans
+ExecStopPost=-/bin/sh /root/r1-screen/r1_panel_restore_tty.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
