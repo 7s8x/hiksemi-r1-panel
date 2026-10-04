@@ -2,12 +2,17 @@
 
 import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from r1_panel import TouchGesture, shifted_state  # noqa: E402
+try:
+    # Local workspace keeps the sanitized export alongside the live-machine copy.
+    from r1_panel_repository import TouchGesture, fan_button_mode, fan_readings, shifted_state  # noqa: E402
+except ModuleNotFoundError:
+    from r1_panel_buttons import TouchGesture, fan_button_mode, fan_readings, shifted_state  # noqa: E402
 
 
 def event(kind, code, value):
@@ -41,17 +46,53 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(gesture((170, 600), (170, 400)), [("swipe_vertical", -200)])
         self.assertEqual(gesture((170, 400), (170, 600)), [("swipe_vertical", 200)])
 
-    def test_tap_is_recognized_but_does_not_change_view(self):
-        self.assertEqual(gesture((170, 400), (175, 404)), [("tap", 0)])
+    def test_tap_retains_button_coordinates(self):
+        self.assertEqual(gesture((170, 400), (175, 404)), [("tap", (175, 404))])
+
+    def test_fan_buttons_only_accept_taps_inside_their_bounds(self):
+        self.assertEqual(fan_button_mode((100, 700)), "full")
+        self.assertEqual(fan_button_mode((250, 700)), "auto")
+        self.assertIsNone(fan_button_mode((188, 700)))
+        self.assertIsNone(fan_button_mode((100, 760)))
 
     def test_diagonal_drag_does_not_switch_view(self):
         self.assertEqual(gesture((80, 350), (230, 470)), [])
 
     def test_view_cycle(self):
-        self.assertEqual([shifted_state(state, -120) for state in ("panel", "console", "off")],
-                         ["console", "off", "panel"])
-        self.assertEqual([shifted_state(state, 120) for state in ("panel", "console", "off")],
-                         ["off", "panel", "console"])
+        self.assertEqual([shifted_state(state, -120) for state in ("panel", "fans", "console", "off")],
+                         ["fans", "console", "off", "panel"])
+        self.assertEqual([shifted_state(state, 120) for state in ("panel", "fans", "console", "off")],
+                         ["off", "panel", "fans", "console"])
+
+
+class FanReadingTests(unittest.TestCase):
+    def test_read_verified_channels_without_writing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            chip = root / "hwmon7"
+            chip.mkdir()
+            for name, value in {"name": "it8613", "fan2_input": "997",
+                                "fan3_input": "2872", "pwm2": "120", "pwm3": "120",
+                                "pwm2_enable": "1", "pwm3_enable": "1"}.items():
+                (chip / name).write_text(value)
+            self.assertEqual(fan_readings(root)["fan3_input"], 2872)
+            self.assertEqual((chip / "pwm2").read_text(), "120")
+            (chip / "fan2_input").write_text("0")
+            self.assertEqual(fan_readings(root)["fan2_input"], 0)
+            (chip / "fan2_input").write_text("-1")
+            self.assertIsNone(fan_readings(root))
+            (chip / "fan2_input").write_text("broken")
+            self.assertIsNone(fan_readings(root))
+
+    def test_missing_or_ambiguous_driver_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertIsNone(fan_readings(root))
+            for number in (0, 1):
+                chip = root / f"hwmon{number}"
+                chip.mkdir()
+                (chip / "name").write_text("it8613")
+            self.assertIsNone(fan_readings(root))
 
 
 if __name__ == "__main__":
