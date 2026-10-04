@@ -1,0 +1,21 @@
+[Unit]
+Description=HIKSEMI R1 conservative software fan curve
+After=local-fs.target
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+StateDirectory=r1-fan-curve
+StateDirectoryMode=0700
+RuntimeDirectory=r1-fan-curve
+RuntimeDirectoryMode=0700
+ExecStartPre=/bin/sh /root/r1-screen/load_it87_for_curve.sh
+ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_fan_curve.py run --seconds 0
+ExecStopPost=-/root/r1-screen/.venv/bin/python /root/r1-screen/r1_fan_curve.py restore
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
