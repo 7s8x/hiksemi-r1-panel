@@ -12,17 +12,13 @@ from pathlib import Path
 import signal
 import time
 
-from r1_hardware import FanCurve, FanPoint
+from r1_hardware import FanCurve
 from r1_fan_control_ipc import publish_status, requested_mode
+from r1_fan_config import CONFIG_FILE, DEFAULT, curves, digest, load
 
 BASELINE_PWM = 120
 EXPECTED_DRIVES = 4
-CPU_CURVE = FanCurve(tuple(FanPoint(t, p) for t, p in
-                           ((55, 120), (65, 120), (70, 140),
-                            (80, 180), (90, 220), (95, 255))))
-DRIVE_CURVE = FanCurve(tuple(FanPoint(t, p) for t, p in
-                             ((35, 120), (40, 120), (45, 140),
-                              (50, 180), (55, 220), (60, 255))))
+CPU_CURVE, DRIVE_CURVE = curves(DEFAULT)
 STOP = False
 
 
@@ -93,13 +89,15 @@ def sample(chip: Path, root: Path = Path("/sys/class/hwmon")) -> Reading:
     )
 
 
-def target_pwm(reading: Reading, expected_drives: int) -> int:
+def target_pwm(reading: Reading, expected_drives: int,
+               active_curves: tuple[FanCurve, FanCurve] | None = None) -> int:
     if (reading.cpu_c is None or reading.drive_c is None
             or reading.drive_count < expected_drives
             or reading.fan2 <= 0 or reading.fan3 <= 0):
         return 255
-    return max(BASELINE_PWM, CPU_CURVE.pwm_at(reading.cpu_c),
-               DRIVE_CURVE.pwm_at(reading.drive_c))
+    cpu_curve, drive_curve = active_curves or (CPU_CURVE, DRIVE_CURVE)
+    return max(BASELINE_PWM, cpu_curve.pwm_at(reading.cpu_c),
+               drive_curve.pwm_at(reading.drive_c))
 
 
 def next_pwm(current: int, requested: int) -> int:
@@ -159,21 +157,36 @@ def run(seconds: int, chip: Path) -> None:
     deadline = None if seconds == 0 else time.monotonic() + seconds
     applied = max(initial.pwm2, initial.pwm3)
     previous_mode = None
+    active_curves = (CPU_CURVE, DRIVE_CURVE)
+    curve_id = digest(DEFAULT)
+    config_mtime = None
     print(f"curve_start={seconds}s drives={initial.drive_count}/{EXPECTED_DRIVES} "
           f"initial_pwm={initial.pwm2}/{initial.pwm3}", flush=True)
     try:
         while not STOP and (deadline is None or time.monotonic() < deadline):
+            try:
+                mtime = CONFIG_FILE.stat().st_mtime_ns
+            except OSError:
+                mtime = None
+            if mtime != config_mtime:
+                try:
+                    active_record = load(CONFIG_FILE)
+                    active_curves = curves(active_record)
+                    curve_id = digest(active_record)
+                    config_mtime = mtime
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    print(f"curve_config_rejected={error}", flush=True)
             reading = sample(chip)
             if not (controllable_mode(reading.mode2, reading.pwm2)
                     and controllable_mode(reading.mode3, reading.pwm3)):
                 raise RuntimeError("PWM mode changed during trial")
             mode = requested_mode(clear_expired=True)
-            target = 255 if mode == "full" else target_pwm(reading, EXPECTED_DRIVES)
+            target = 255 if mode == "full" else target_pwm(reading, EXPECTED_DRIVES, active_curves)
             applied = target if previous_mode == "full" and mode == "auto" else next_pwm(applied, target)
             set_both(chip, applied)
             previous_mode = mode
             try:
-                publish_status(mode, applied)
+                publish_status(mode, applied, curve_id=curve_id)
             except OSError as error:
                 print(f"status_write_error={error}", flush=True)
             print(f"cpu={reading.cpu_c} drive={reading.drive_c} "

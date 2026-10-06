@@ -1,30 +1,32 @@
 # HIKSEMI R1 · PVE 前屏与硬件实验
 
-本私有仓库保存海康 R1 在 PVE 上的前屏、软件温控和 RGB 灯开关。`main` 与 `stable-2026-10-05-fan-rgb` 保存用户现场验收的稳定版；`develop` 保留为后续开发。旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。
+本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。`main` 保存最新现场验收版；`stable-2026-10-05-fan-rgb` 保留旧版作为回退点，`develop` 保留为后续开发。旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。
 
-## 当前功能与证据（2026-10-05）
+## 当前功能与证据（2026-10-06）
 
 | 功能 | 已验证 | 尚未验证 |
 | --- | --- | --- |
-| 前屏总览 | 376×960 DSI、Cairo/framebuffer、15 秒刷新；左右滑切视图、上下滑调亮度，黑屏唤醒无控制台闪屏；`r1-panel.service` 常驻运行 | 整机重启后的自动恢复 |
-| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM 显示；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；实体按钮已验收 | 两路风扇的物理身份、长时间热循环及内核升级兼容性 |
-| RGB 开关 | 风扇页单击关灯/开灯，现场确认实体灯亮灭和恢复；只写 `i2c-0/0x26` 的模式寄存器 | Web 调色功能 |
+| 前屏总览 | 376×960 DSI、Cairo/framebuffer；左右滑切四状态、上下滑调亮度，黑屏唤醒无控制台闪屏；前台采集已移到后台；tty2 光标隐藏后固定小黑块消失 | 整机重启后的自动恢复、实体控制台顶部亮带原因 |
+| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；实体与 Web 按钮已验收 | 两路风扇的物理身份、长时间热循环及内核升级兼容性 |
+| RGB | 前屏与 Web 开关、常亮、呼吸、彩虹及颜色现场验收；按已验证 PCI 控制器定位会变号的 I²C 总线，只访问 `0x26` | 长期运行观察 |
+| HTTPS Web | 登录后镜像实体屏四状态，可切页、调亮度、点实体屏；温度-PWM 坐标图拖动并经校验保存；控制台只读 | PVE 主机防火墙尚未启用 |
 
-PVE 已启用 `r1-panel.service` 与 `r1-fan-curve.service`，用户现场确认屏幕、风扇模式按钮和 RGB 开关可用。离线测试 34 项通过；未为了验证而重启 PVE。此仓库不包含驱动二进制、fnOS 安装包、私钥、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识，因此与 PVE 运行副本只有这一处主机配置差异。
+PVE 已启用 `r1-panel.service`、`r1-fan-curve.service`、`r1-web.service`，三者均 active/enabled，离线测试 45 项通过；用户已现场确认 Web 与实体 RGB 修复后正常。未为了验证而重启 PVE。此仓库不包含驱动二进制、fnOS 安装包、私钥、密码、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识。
 
 ## 文件
 
-- `r1_panel_buttons.py`：当前稳定面板。由本机未跟踪的 `drives.json` 加载硬盘标识；缺失时仍可运行，只是不显示逐盘温度。`r1_panel.py` 是旧屏幕版，留作历史回退。
+- `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py`：当前前屏。由本机未跟踪的 `drives.json` 加载硬盘标识；缺失时仍可运行，只是不显示逐盘温度。`r1_panel_buttons.py` 是 10 月 5 日旧稳定版。
 - `r1_fan_curve.py` / `r1_fan_control_ipc.py`：保守软件温控与屏幕模式请求；风扇停转或传感器缺失时请求全速。
-- `r1-panel.service` / `r1-fan-curve.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
+- `r1-panel.service` / `r1-fan-curve.service` / `r1-web.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
 - `r1_hardware.py` / `r1_hardware_probe.py`：早期只读硬件探测与离线计算，不属于常驻服务。
 - `r1_rgb_probe.py`：只对已知 `0x26` 地址定点读取，不扫整个 I²C 总线。
 - `r1_rgb_trial.py`：单台主机使用的短时 RGB 协议验证，原状态基线写死为 `(2,255,0,0)`；**不要在其他机器或状态改变后直接执行**。
-- `r1_rgb_control.py`：常驻面板使用的最小开关，仅切换模式并回读，不调整颜色。
+- `r1_rgb_control.py`：前屏与 Web 共用的 RGB 控制；按固定 PCI 控制器路径动态解析 I²C 总线，读写后回读。
+- `r1_web.py` / `r1_web.html` / `r1_fan_config.py`：HTTPS Web 管理和经校验的持久风扇曲线。密码、证书和曲线实例文件只保存在本机，不进入仓库。
 - `experiments/`：当次风扇通道验证、回退和采样脚本，含当次主机 PWM/背光基线；只作为历史复现资料，不是通用安装程序。
 - `tests/`：不接触真实硬件的手势、风扇读数、RGB 回退测试。
 
-不要提交 `drives.json`，可用 `drives.example.json` 作为格式参考。RGB 开关不控制风扇；温控服务独立于前屏运行。
+不要提交 `drives.json`，可用 `drives.example.json` 作为格式参考。RGB 开关不控制风扇；温控服务独立于前屏和 Web 运行。Web 仅监听已配置的家庭 IPv4 地址并要求 HTTPS 登录，但应用层来源限制不能替代 PVE 主机防火墙。
 
 ## 安全边界与回退
 

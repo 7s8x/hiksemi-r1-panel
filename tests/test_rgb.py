@@ -8,7 +8,7 @@ from unittest.mock import call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from r1_rgb_trial import BASELINE, run_trial, set_state, write_byte_data  # noqa: E402
-from r1_rgb_control import RgbControl  # noqa: E402
+from r1_rgb_control import RgbControl, rgb_bus_path  # noqa: E402
 try:
     from r1_panel_repository import rgb_button_hit  # noqa: E402
 except ModuleNotFoundError:
@@ -16,6 +16,25 @@ except ModuleNotFoundError:
 
 
 class RgbTrialTests(unittest.TestCase):
+    def test_rgb_bus_follows_verified_adapter_not_bus_number(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            adapter = Path(directory)
+            bus = adapter / 'i2c-7'
+            bus.mkdir()
+            (bus / 'name').write_text('Synopsys DesignWare I2C adapter\n')
+            self.assertEqual(rgb_bus_path(adapter), '/dev/i2c-7')
+
+    def test_rgb_bus_fails_closed_on_wrong_adapter(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            adapter = Path(directory)
+            bus = adapter / 'i2c-0'
+            bus.mkdir()
+            (bus / 'name').write_text('SMBus I801 adapter\n')
+            with self.assertRaisesRegex(RuntimeError, 'unavailable'):
+                rgb_bus_path(adapter)
+
     def test_screen_button_bounds(self):
         self.assertTrue(rgb_button_hit((280, 850)))
         self.assertTrue(rgb_button_hit((318, 881)))

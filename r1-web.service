@@ -1,0 +1,23 @@
+[Unit]
+Description=HIKSEMI R1 local HTTPS panel management
+After=network-online.target r1-panel.service r1-fan-curve.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+StateDirectory=r1-web
+StateDirectoryMode=0700
+ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_web.py serve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/r1-web /var/lib/r1-fan-curve
+DevicePolicy=closed
+DeviceAllow=/dev/fb0 r
+RestrictAddressFamilies=AF_INET AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

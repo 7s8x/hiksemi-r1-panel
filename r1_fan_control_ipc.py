@@ -68,11 +68,14 @@ def request_mode(mode: str, path: Path = MODE_FILE) -> None:
     _replace_text(path, content)
 
 
-def publish_status(mode: str, pwm: int, path: Path = STATUS_FILE) -> None:
+def publish_status(mode: str, pwm: int, path: Path = STATUS_FILE,
+                   curve_id: str | None = None) -> None:
     if mode not in MODES or not 120 <= pwm <= 255:
         raise ValueError("invalid fan status")
-    _replace_text(path, json.dumps({"mode": mode, "pwm": pwm,
-                                    "updated": time.time()}, separators=(",", ":")))
+    record = {"mode": mode, "pwm": pwm, "updated": time.time()}
+    if curve_id is not None:
+        record["curve_id"] = curve_id
+    _replace_text(path, json.dumps(record, separators=(",", ":")))
 
 
 def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
@@ -82,7 +85,7 @@ def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
     remaining = (max(0, math.ceil(expiry - time.time()))
                  if stored_mode == "full" and expiry is not None and desired == "full"
                  else None)
-    result = {"desired": desired, "mode": None, "pwm": None,
+    result = {"desired": desired, "mode": None, "pwm": None, "curve_id": None,
               "live": False, "remaining": remaining}
     try:
         status = json.loads(status_path.read_text(encoding="ascii"))
@@ -92,7 +95,8 @@ def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
         if (mode in MODES and isinstance(pwm, int) and 120 <= pwm <= 255
                 and isinstance(updated, (int, float))
                 and 0 <= time.time() - updated <= max_age):
-            result.update(mode=mode, pwm=pwm, live=True)
+            result.update(mode=mode, pwm=pwm, live=True,
+                          curve_id=status.get("curve_id"))
     except (OSError, ValueError, KeyError, TypeError, UnicodeError):
         pass
     return result

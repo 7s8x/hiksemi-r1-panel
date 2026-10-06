@@ -7,8 +7,10 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+RuntimeDirectory=r1-panel
+RuntimeDirectoryMode=0700
 ExecStartPre=/bin/sh /root/r1-screen/r1_panel_preflight.sh
-ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_panel_buttons.py --touch --initial-view fans
+ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_panel_next.py --touch --initial-view fans
 ExecStopPost=-/bin/sh /root/r1-screen/r1_panel_restore_tty.sh
 Restart=on-failure
 RestartSec=5
