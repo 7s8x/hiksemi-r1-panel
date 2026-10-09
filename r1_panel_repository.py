@@ -35,7 +35,10 @@ def load_drives():
 
 DRIVES = load_drives()
 STOP = False
-SCREEN_STATES = ("panel", "fans", "console", "off")
+_CPU_SAMPLE = None
+# Temporary DSI workaround: switching to tty1 can leave the physical LCD
+# showing a stale console frame even though the framebuffer keeps updating.
+SCREEN_STATES = ("panel", "fans", "off")
 RGB = RgbControl()
 
 
@@ -112,6 +115,56 @@ def memory():
     return values.get("MemTotal", 0), values.get("MemTotal", 0) - values.get("MemAvailable", 0)
 
 
+def cpu_usage():
+    """Compute host CPU busy percentage between two collector samples."""
+    global _CPU_SAMPLE
+    fields = read_text("/proc/stat").splitlines()
+    if not fields or not fields[0].startswith("cpu "):
+        return None
+    try:
+        ticks = [int(value) for value in fields[0].split()[1:]]
+    except ValueError:
+        return None
+    total = sum(ticks)
+    idle = ticks[3] + (ticks[4] if len(ticks) > 4 else 0)
+    previous, _CPU_SAMPLE = _CPU_SAMPLE, (total, idle)
+    if previous is None or total <= previous[0]:
+        return None
+    return max(0, min(100, round(100 * (1 - (idle - previous[1]) / (total - previous[0])))))
+
+
+def disk_identity(by_id):
+    """Use only the already-configured disk, without probing other devices."""
+    disk = Path("/dev/disk/by-id", by_id).resolve()
+    name = disk.name
+    sectors = read_text(Path("/sys/block", name, "size"))
+    try:
+        capacity = int(sectors) * 512 / 1_000_000_000
+    except ValueError:
+        capacity = 0
+    size = (f"{capacity / 1000:.0f}TB" if capacity >= 1000
+            else f"{capacity:.0f}GB" if capacity else "--")
+    kind = ("NVME" if name.startswith("nvme") else
+            "HDD" if read_text(Path("/sys/block", name, "queue/rotational")) == "1" else "SSD")
+    serial = by_id.rsplit("_", 1)[-1] if "_" in by_id else "--"
+    return size, kind, serial
+
+
+def nvme_identity():
+    devices = sorted(Path("/sys/block").glob("nvme*n*"))
+    if not devices:
+        return "--", "NVME", "--"
+    name = devices[0].name
+    sectors = read_text(devices[0] / "size")
+    try:
+        capacity = int(sectors) * 512 / 1_000_000_000
+    except ValueError:
+        capacity = 0
+    size = f"{capacity / 1000:.0f}TB" if capacity >= 1000 else f"{capacity:.0f}GB" if capacity else "--"
+    controller = name.rsplit("n", 1)[0]
+    return size, "NVME", read_text(Path("/sys/class/nvme", controller, "serial")) or "--"
+
+
 def vm_status(vmid):
     try:
         result = subprocess.run(
@@ -145,8 +198,11 @@ def snapshot():
         uptime = 0
     return {
         "cpu": temp_for_hwmon("coretemp"),
+        "cpu_usage": cpu_usage(),
         "nvme": temp_for_hwmon("nvme"),
         "drives": [(label, drive_temperature(disk)) for label, disk in DRIVES],
+        "storage": [(nvme_identity(), temp_for_hwmon("nvme"))] +
+                   [(disk_identity(disk), drive_temperature(disk)) for _, disk in DRIVES],
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,
@@ -170,11 +226,15 @@ class Painter:
             "cairo_surface_destroy": ([ctypes.c_void_p], None),
             "cairo_set_source_rgb": ([ctypes.c_void_p, ctypes.c_double, ctypes.c_double, ctypes.c_double], None),
             "cairo_rectangle": ([ctypes.c_void_p, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double], None),
+            "cairo_new_sub_path": ([ctypes.c_void_p], None),
+            "cairo_arc": ([ctypes.c_void_p, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double], None),
+            "cairo_close_path": ([ctypes.c_void_p], None),
             "cairo_fill": ([ctypes.c_void_p], None),
             "cairo_move_to": ([ctypes.c_void_p, ctypes.c_double, ctypes.c_double], None),
             "cairo_select_font_face": ([ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int], None),
             "cairo_set_font_size": ([ctypes.c_void_p, ctypes.c_double], None),
             "cairo_show_text": ([ctypes.c_void_p, ctypes.c_char_p], None),
+            "cairo_text_extents": ([ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p], None),
             "cairo_surface_flush": ([ctypes.c_void_p], None),
             "cairo_image_surface_get_data": ([ctypes.c_void_p], ctypes.c_void_p),
             "cairo_image_surface_get_stride": ([ctypes.c_void_p], ctypes.c_int),
@@ -195,6 +255,18 @@ class Painter:
         self.lib.cairo_rectangle(self.ctx, x, y, w, h)
         self.lib.cairo_fill(self.ctx)
 
+    def round_rect(self, x, y, w, h, rgb, radius=6):
+        self.color(rgb)
+        r = min(radius, w / 2, h / 2)
+        self.lib.cairo_new_sub_path(self.ctx)
+        for cx, cy, start in ((x + w - r, y + r, -1.5707963268),
+                              (x + w - r, y + h - r, 0),
+                              (x + r, y + h - r, 1.5707963268),
+                              (x + r, y + r, 3.1415926536)):
+            self.lib.cairo_arc(self.ctx, cx, cy, r, start, start + 1.5707963268)
+        self.lib.cairo_close_path(self.ctx)
+        self.lib.cairo_fill(self.ctx)
+
     def text(self, x, y, value, size=18, rgb=(222, 235, 240), bold=False):
         self.color(rgb)
         self.lib.cairo_select_font_face(self.ctx, b"DejaVu Sans", 0, 1 if bold else 0)
@@ -202,10 +274,19 @@ class Painter:
         self.lib.cairo_move_to(self.ctx, x, y)
         self.lib.cairo_show_text(self.ctx, str(value).encode("utf-8"))
 
+    def text_right(self, right, y, value, size=18, rgb=(222, 235, 240), bold=False):
+        self.lib.cairo_select_font_face(self.ctx, b"DejaVu Sans", 0, 1 if bold else 0)
+        self.lib.cairo_set_font_size(self.ctx, size)
+        extents = (ctypes.c_double * 6)()
+        self.lib.cairo_text_extents(self.ctx, str(value).encode("utf-8"), extents)
+        self.text(right - extents[4], y, value, size, rgb, bold)
+
     def draw(self, data, touch_mode=False, brightness=None, view="panel"):
         if view == "fans":
-            self.draw_fans(data, touch_mode=touch_mode, brightness=brightness)
+            self.draw_locked_fans(data)
             return
+        self.draw_locked_panel(data)
+        return
         bg, panel, muted, fg, cyan = (9, 20, 29), (19, 40, 52), (145, 169, 180), (231, 242, 246), (103, 185, 208)
         self.rect(0, 0, WIDTH, HEIGHT, bg)
         self.text(24, 42, "HIKSEMI R1  /  PVE", 14, cyan, True)
@@ -322,6 +403,129 @@ class Painter:
             self.text(24, 942, f"SWIPE L/R: VIEW    UP/DOWN: {brightness}%", 9, muted)
         else:
             self.text(24, 942, "DISPLAY ONLY  -  NO TOUCH ACTIONS", 10, muted)
+        self.lib.cairo_surface_flush(self.surface)
+
+    def draw_locked_header(self, data, title, status, status_color):
+        bg, fg, cyan, muted = (9, 20, 29), (231, 242, 246), (103, 185, 208), (145, 169, 180)
+        self.rect(0, 0, WIDTH, HEIGHT, bg)
+        self.text(24, 42, "HIKSEMI R1  /  PVE", 14, cyan, True)
+        self.text(24, 80, title, 27, fg, True)
+        self.rect(24, 104, 9, 9, status_color)
+        self.text(42, 115, status, 14, status_color)
+        self.text(24, 174, data.get("clock", "--:--"), 43, fg, True)
+        self.text(240, 143, "UPTIME", 12, muted)
+        uptime = max(0, data.get("uptime") or 0)
+        self.text(240, 171, f"{uptime // 86400}D {uptime % 86400 // 3600}H", 24, cyan, True)
+
+    def draw_locked_panel(self, data):
+        panel, muted, fg = (19, 40, 52), (145, 169, 180), (231, 242, 246)
+        cyan, green, amber = (103, 185, 208), (112, 213, 183), (247, 173, 109)
+        self.draw_locked_header(data, "HOST OVERVIEW", "HOST ONLINE", green)
+        self.round_rect(20, 194, 336, 142, panel)
+        self.rect(187, 212, 1, 88, (41, 65, 79))
+        self.text(40, 222, "CPU USAGE", 13, muted)
+        self.text(207, 222, "CPU TEMP", 13, muted)
+        usage, cpu = data.get("cpu_usage"), data.get("cpu")
+        self.text(38, 275, "--" if usage is None else f"{usage}%", 49, fg, True)
+        self.text(204, 275, "--" if cpu is None else f"{cpu:.0f}", 49, fg, True)
+        self.text(288, 274, "°C", 22, fg)
+        self.rect(40, 295, 127, 6, (31, 56, 68))
+        self.rect(207, 295, 129, 6, (31, 56, 68))
+        if usage is not None:
+            self.rect(40, 295, round(127 * max(0, min(100, usage)) / 100), 6, green)
+        if cpu is not None:
+            self.rect(207, 295, round(129 * max(0, min(105, cpu)) / 105), 6, amber)
+        stale = time.monotonic() - data.get("captured_at", 0) > 30
+        self.text(40, 324, "DATA STALE / CHECK COLLECTOR" if stale else "LIVE DATA / 15 SEC REFRESH",
+                  11, amber if stale else muted)
+        self.text(24, 367, "HARDWARE TEMPERATURE", 17, fg, True)
+        storage = data.get("storage") or []
+        for index, (identity, temperature) in enumerate(storage[:5]):
+            size, kind, serial = identity
+            y = 384 + index * 80
+            self.round_rect(20, y, 336, 76, panel)
+            self.text(36, y + 30, f"{size}  {kind}", 18, fg, True)
+            self.text(36, y + 58, f"SN {str(serial)[:22]}", 11, muted)
+            self.text_right(303, y + 50, "--" if temperature is None else f"{temperature:.0f}", 34, cyan, True)
+            self.text(307, y + 49, "°C", 17, cyan, True)
+        self.text(24, 808, "SYSTEM", 17, fg, True)
+        self.round_rect(20, 826, 161, 119, panel)
+        self.round_rect(195, 826, 161, 119, panel)
+        self.text(34, 852, "VM STATUS", 12, muted)
+        vm_names = {100: "Synology", 111: "ImmortalWrt"}
+        for index, (vmid, status) in enumerate(data.get("vms") or []):
+            if index >= 2:
+                break
+            y = 883 + index * 27
+            color = green if status == "RUNNING" else muted
+            self.text(34, y, vm_names.get(vmid, str(vmid)), 14, color, True)
+            self.text_right(167, y, "ON" if status == "RUNNING" else "OFF" if status == "STOPPED" else "--", 12, color, True)
+        self.text(209, 852, "MEMORY USED", 12, muted)
+        used, total = data.get("mem_used") or 0, data.get("mem_total") or 0
+        self.text(209, 898, f"{used:.1f}", 32, fg, True)
+        self.text_right(342, 898, f"/ {total:.0f} GiB", 12, muted)
+        self.rect(209, 922, 133, 5, (31, 56, 68))
+        if total > 0:
+            self.rect(209, 922, round(133 * min(1, used / total)), 5, cyan)
+        self.lib.cairo_surface_flush(self.surface)
+
+    def draw_locked_fans(self, data):
+        panel, muted, fg = (19, 40, 52), (145, 169, 180), (231, 242, 246)
+        cyan, green, amber, bg = (103, 185, 208), (112, 213, 183), (247, 173, 109), (9, 20, 29)
+        fans = data.get("fans")
+        valid = fans is not None and time.monotonic() - data.get("captured_at", 0) <= 30
+        stopped = valid and any(fans[f"fan{channel}_input"] == 0 for channel in (2, 3))
+        status_color = green if valid and not stopped else amber
+        status = "FAN RPM ZERO" if stopped else "IT8613E / LIVE" if valid else "DATA STALE / OFFLINE"
+        self.draw_locked_header(data, "FAN MONITOR", status, status_color)
+        control = data.get("control") or {}
+        for index, (name, channel) in enumerate((("SYS FAN", 2), ("CPU FAN", 3))):
+            y = 194 + index * 210
+            rpm = fans.get(f"fan{channel}_input") if valid else None
+            pwm = fans.get(f"pwm{channel}") if valid else None
+            self.round_rect(20, y, 336, 197, panel)
+            self.text(40, y + 33, name, 19, fg, True)
+            self.text_right(336, y + 33, f"FAN {channel}", 12, muted)
+            self.text(40, y + 108, "--" if rpm is None else str(rpm), 66,
+                      green if rpm and rpm > 0 else amber, True)
+            self.text_right(336, y + 105, "RPM", 17, muted)
+            self.rect(40, y + 126, 296, 2, (41, 65, 79))
+            percent = "--" if pwm is None else str(round(pwm * 100 / 255))
+            self.text(40, y + 160, f"OUTPUT {percent}%", 18, fg)
+            self.text(40, y + 183, "SW AUTO / MANUAL PWM", 12, muted)
+        live = bool(control.get("live"))
+        desired, actual = control.get("desired"), control.get("mode")
+        if not live:
+            control_text, control_color = "CONTROLLER OFFLINE", amber
+        elif desired != actual:
+            control_text, control_color = "APPLYING MODE...", amber
+        else:
+            remaining = control.get("remaining")
+            control_text = (f"FULL SPEED {remaining}S LEFT" if actual == "full" and remaining is not None
+                            else "FULL SPEED ACTIVE" if actual == "full" else "AUTO CURVE ACTIVE")
+            control_color = amber if actual == "full" else green
+        self.round_rect(20, 635, 336, 127, panel)
+        self.text(40, 663, "FAN CONTROL", 18, cyan, True)
+        self.text(40, 690, control_text, 15, control_color, True)
+        for mode, label, x, selected_color in (("full", "FULL SPEED", 30, amber),
+                                                ("auto", "AUTO CURVE", 196, green)):
+            selected = live and desired == mode
+            self.round_rect(x, 706, 150, 44, selected_color if selected else (32, 61, 77), 4)
+            self.text(x + 13, 734, label, 14, bg if selected else fg, True)
+        self.text(24, 783, "THERMAL / LIGHT", 17, fg, True)
+        drive_temps = [temp for _, temp in data.get("drives") or [] if temp is not None]
+        cpu = data.get("cpu")
+        self.text(24, 807, f"CPU {'--' if cpu is None else f'{cpu:.0f}°C'}   MAX DRIVE "
+                  f"{'--' if not drive_temps else f'{max(drive_temps):.0f}°C'}", 13, muted)
+        self.round_rect(20, 825, 336, 127, panel)
+        rgb = data.get("rgb")
+        self.text(40, 853, "R1 RGB LIGHT", 18, cyan, True)
+        self.text(40, 880, "LIGHT UNAVAILABLE" if rgb is None else "LIGHT ON" if rgb else "LIGHT OFF",
+                  15, amber if rgb is None else green if rgb else muted, True)
+        for action, label, x in (("on", "TURN ON", 30), ("off", "TURN OFF", 196)):
+            selected = rgb is not None and rgb == (action == "on")
+            self.round_rect(x, 896, 150, 44, green if selected else (32, 61, 77), 4)
+            self.text(x + 13, 924, label, 14, bg if selected else fg, True)
         self.lib.cairo_surface_flush(self.surface)
 
     def end_screen(self):
@@ -456,7 +660,7 @@ def shifted_state(current, horizontal_delta):
 
 def fan_button_mode(point):
     x, y = point
-    if 678 <= y <= 732:
+    if 706 <= y <= 750:
         if 30 <= x <= 180:
             return "full"
         if 196 <= x <= 346:
@@ -464,10 +668,14 @@ def fan_button_mode(point):
     return None
 
 
-def rgb_button_hit(point):
+def rgb_button_action(point):
     x, y = point
-    # A small margin around the painted button avoids missed edge taps.
-    return 215 <= x <= 351 and 815 <= y <= 900
+    if 896 <= y <= 940:
+        if 30 <= x <= 180:
+            return "on"
+        if 196 <= x <= 346:
+            return "off"
+    return None
 
 
 def run_touch(painter, initial_view="panel"):
@@ -495,8 +703,17 @@ def run_touch(painter, initial_view="panel"):
         with mmap.mmap(fb_fd, line_length * HEIGHT, mmap.MAP_SHARED, mmap.PROT_WRITE) as framebuffer:
             def blit():
                 pixels, stride = painter.pixels()
+                # The i915 fbdev write path reports damaged regions to DRM.
+                # Direct mmap stores may leave FBC displaying an old frame.
+                frame = bytearray(line_length * HEIGHT)
                 for y in range(HEIGHT):
-                    framebuffer[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
+                    frame[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
+                written = 0
+                while written < len(frame):
+                    count = os.pwrite(fb_fd, memoryview(frame)[written:], written)
+                    if count <= 0:
+                        raise OSError("short framebuffer write")
+                    written += count
 
             def refresh(use_cache=False, view=None):
                 nonlocal last_data, last_sequence
@@ -510,10 +727,21 @@ def run_touch(painter, initial_view="panel"):
                     data["control"] = control_status()
                 painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum), view=view or state)
                 blit()
+                # getty@tty2 can start after the first chvt and re-enable its
+                # text cursor. Reassert the per-VT hide after every redraw.
+                set_tty2_cursor(False)
 
             def show_dashboard(target):
                 if state in ("panel", "fans"):
                     refresh(use_cache=True, view=target)
+                    return
+                if state == "off":
+                    # Keep tty2 and the DSI link active while the backlight is
+                    # dark. Re-enabling fb_blank can freeze this panel on a
+                    # stale tty1 frame (i915 video_mode == 3 warning).
+                    refresh(use_cache=True, view=target)
+                    (backlight / "brightness").write_text(str(brightness))
+                    blit()
                     return
                 # Keep the LCD dark while chvt/fbcon and fb_blank redraw the
                 # framebuffer. Reveal it only after our own frame is ready.
@@ -534,13 +762,12 @@ def run_touch(painter, initial_view="panel"):
                 (backlight / "brightness").write_text(str(brightness))
 
             def show_off():
-                # Clear residual LCD pixels before blanking the display.
+                # Paint black and extinguish the backlight without resetting
+                # the DSI link; blank/unblank can leave the LCD scanout stale.
                 painter.rect(0, 0, WIDTH, HEIGHT, (0, 0, 0))
                 painter.lib.cairo_surface_flush(painter.surface)
                 blit()
                 (backlight / "brightness").write_text("0")
-                (backlight / "bl_power").write_text("4")
-                fb_blank.write_text("4")
 
             def transition(target):
                 nonlocal state, next_refresh
@@ -568,8 +795,11 @@ def run_touch(painter, initial_view="panel"):
                     transition(shifted_state(state, value))
                 elif action == "tap":
                     mode = fan_button_mode(value) if state == "fans" else None
-                    if state == "fans" and rgb_button_hit(value):
-                        enabled = RGB.toggle()
+                    rgb_action = rgb_button_action(value) if state == "fans" else None
+                    if rgb_action is not None:
+                        enabled = RGB.status()
+                        if enabled != (rgb_action == "on"):
+                            enabled = RGB.toggle()
                         if last_data is not None:
                             last_data["rgb"] = enabled
                         refresh(use_cache=True)

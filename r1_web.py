@@ -50,8 +50,8 @@ FRAME_CACHE: tuple[float, str, bytes] | None = None
 
 
 def hash_password(password: str, salt: bytes | None = None) -> dict:
-    if len(password) < 16:
-        raise ValueError("admin password must contain at least 16 characters")
+    if not 8 <= len(password) <= 256:
+        raise ValueError("admin password must contain 8–256 characters")
     salt = salt or secrets.token_bytes(16)
     result = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1)
     return {"salt": salt.hex(), "hash": result.hex()}
@@ -81,6 +81,21 @@ def atomic_json(path: Path, record: dict):
             temporary.unlink()
         except FileNotFoundError:
             pass
+
+
+def change_admin_password(current: str, new: str) -> None:
+    if not isinstance(current, str) or not isinstance(new, str):
+        raise ValueError("invalid password request")
+    if not 8 <= len(new) <= 256:
+        raise ValueError("new password must contain 8–256 characters")
+    with AUTH_LOCK:
+        record = json.loads(ADMIN_FILE.read_text(encoding="utf-8"))
+        if not verify_password(current, record):
+            raise ValueError("current password is incorrect")
+        if hmac.compare_digest(current, new):
+            raise ValueError("new password must differ from current password")
+        atomic_json(ADMIN_FILE, hash_password(new))
+        SESSIONS.clear()
 
 
 def initialize():
@@ -275,20 +290,21 @@ class Handler(BaseHTTPRequestHandler):
             if blocked:
                 self._json(429, {"error": "too many attempts"})
                 return
-            try:
-                record = json.loads(ADMIN_FILE.read_text(encoding="utf-8"))
-                valid = isinstance(body, dict) and isinstance(body.get("password"), str) and verify_password(body["password"], record)
-            except (OSError, ValueError):
-                valid = False
-            if not valid:
-                with AUTH_LOCK:
+            with AUTH_LOCK:
+                try:
+                    record = json.loads(ADMIN_FILE.read_text(encoding="utf-8"))
+                    valid = isinstance(body, dict) and isinstance(body.get("password"), str) and verify_password(body["password"], record)
+                except (OSError, ValueError):
+                    valid = False
+                if not valid:
                     FAILURES.setdefault(address, []).append(now)
+                else:
+                    token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(24)
+                    FAILURES.pop(address, None)
+                    SESSIONS[token] = (now + 8 * 3600, csrf)
+            if not valid:
                 self._json(401, {"error": "invalid credentials"})
                 return
-            token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(24)
-            with AUTH_LOCK:
-                FAILURES.pop(address, None)
-                SESSIONS[token] = (now + 8 * 3600, csrf)
             self._json(200, {"ok": True, "csrf": csrf},
                        {"Set-Cookie": f"r1session={token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800"})
             return
@@ -304,9 +320,16 @@ class Handler(BaseHTTPRequestHandler):
                 with AUTH_LOCK:
                     SESSIONS.pop(session[0], None)
                 self._json(200, {"ok": True}, {"Set-Cookie": "r1session=; Max-Age=0; Secure; HttpOnly; SameSite=Strict; Path=/"})
+            elif path == "/api/password":
+                if not isinstance(body, dict) or set(body) != {"current", "new"}:
+                    raise ValueError("invalid password request")
+                change_admin_password(body["current"], body["new"])
+                self._json(200, {"ok": True}, {"Set-Cookie": "r1session=; Max-Age=0; Secure; HttpOnly; SameSite=Strict; Path=/"})
             elif path == "/api/panel":
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")
+                if body == {"action": "page", "value": "console"}:
+                    raise ValueError("console page temporarily disabled due to DSI display fault")
                 result = request(body)
                 self._json(200 if result.get("ok") else 400, result)
             elif path == "/api/fan/mode":

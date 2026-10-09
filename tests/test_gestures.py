@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
     # Local workspace keeps the sanitized export alongside the live-machine copy.
-    from r1_panel_repository import TouchGesture, fan_button_mode, fan_readings, shifted_state  # noqa: E402
+    from r1_panel_repository import TouchGesture, fan_button_mode, fan_readings, rgb_button_action, shifted_state  # noqa: E402
 except ModuleNotFoundError:
     from r1_panel_buttons import TouchGesture, fan_button_mode, fan_readings, shifted_state  # noqa: E402
 
@@ -50,19 +50,22 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(gesture((170, 400), (175, 404)), [("tap", (175, 404))])
 
     def test_fan_buttons_only_accept_taps_inside_their_bounds(self):
-        self.assertEqual(fan_button_mode((100, 700)), "full")
-        self.assertEqual(fan_button_mode((250, 700)), "auto")
-        self.assertIsNone(fan_button_mode((188, 700)))
+        self.assertEqual(fan_button_mode((100, 720)), "full")
+        self.assertEqual(fan_button_mode((250, 720)), "auto")
+        self.assertIsNone(fan_button_mode((188, 720)))
         self.assertIsNone(fan_button_mode((100, 760)))
+        self.assertEqual(rgb_button_action((100, 918)), "on")
+        self.assertEqual(rgb_button_action((250, 918)), "off")
+        self.assertIsNone(rgb_button_action((188, 918)))
 
     def test_diagonal_drag_does_not_switch_view(self):
         self.assertEqual(gesture((80, 350), (230, 470)), [])
 
     def test_view_cycle(self):
-        self.assertEqual([shifted_state(state, -120) for state in ("panel", "fans", "console", "off")],
-                         ["fans", "console", "off", "panel"])
-        self.assertEqual([shifted_state(state, 120) for state in ("panel", "fans", "console", "off")],
-                         ["off", "panel", "fans", "console"])
+        self.assertEqual([shifted_state(state, -120) for state in ("panel", "fans", "off")],
+                         ["fans", "off", "panel"])
+        self.assertEqual([shifted_state(state, 120) for state in ("panel", "fans", "off")],
+                         ["off", "panel", "fans"])
 
 
 class FanReadingTests(unittest.TestCase):

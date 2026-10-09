@@ -1,21 +1,22 @@
 # HIKSEMI R1 · PVE 前屏与硬件实验
 
-本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。`main` 保存最新现场验收版；`stable-2026-10-05-fan-rgb` 保留旧版作为回退点，`develop` 保留为后续开发。旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。
+本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。`main` 保留此前已验收版；本快照记录 2026-10-09 的新版 UI 与受保护长测状态，尚不代表 24 小时长测已完成。旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。
 
-## 当前功能与证据（2026-10-06）
+## 当前功能与证据（2026-10-09）
 
 | 功能 | 已验证 | 尚未验证 |
 | --- | --- | --- |
-| 前屏总览 | 376×960 DSI、Cairo/framebuffer；左右滑切四状态、上下滑调亮度，黑屏唤醒无控制台闪屏；前台采集已移到后台；tty2 光标隐藏后固定小黑块消失 | 整机重启后的自动恢复、实体控制台顶部亮带原因 |
-| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；实体与 Web 按钮已验收 | 两路风扇的物理身份、长时间热循环及内核升级兼容性 |
+| 前屏总览 | 376×960 DSI、Cairo；信息页、风扇页、黑屏三状态，无 PVE 控制台页；`pwrite` 写 `/dev/fb0` 的 2 分钟及 30 分钟现场试运行通过，新版两页排版与滑动已目视确认 | `pwrite` 是否根治旧控制台色块/假死尚未证明；24 小时长测仍进行中，前屏未恢复开机自启 |
+| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；两轮短时单路提速与机箱前后出风观察后，用户确认 FAN2 为机箱风扇、FAN3 为 CPU 风扇 | 长时间热循环及内核升级兼容性 |
 | RGB | 前屏与 Web 开关、常亮、呼吸、彩虹及颜色现场验收；按已验证 PCI 控制器定位会变号的 I²C 总线，只访问 `0x26` | 长期运行观察 |
-| HTTPS Web | 登录后镜像实体屏四状态，可切页、调亮度、点实体屏；温度-PWM 坐标图拖动并经校验保存；控制台只读 | PVE 主机防火墙尚未启用 |
+| HTTPS Web | 登录后镜像实体屏，可切三状态、调亮度、点实体屏；温度-PWM 坐标图拖动并经校验保存；支持当前密码验证后修改为 8–256 字符的新密码 | PVE 主机防火墙尚未启用；本机无证书的 HTTP 模拟预览不连接 R1 |
 
-PVE 已启用 `r1-panel.service`、`r1-fan-curve.service`、`r1-web.service`，三者均 active/enabled，离线测试 45 项通过；用户已现场确认 Web 与实体 RGB 修复后正常。未为了验证而重启 PVE。此仓库不包含驱动二进制、fnOS 安装包、私钥、密码、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识。
+2026-10-09 09:07 CST 复核：`r1-panel.service` active/disabled、`NRestarts=0`，自 10 月 8 日 19:53 启动；独立 24 小时停屏计时器仍 active，定于 10 月 9 日 19:52 自动停前屏。`r1-fan-curve.service`、`r1-web.service` active/enabled。离线测试 47 项通过。前屏运行进程仍持有更改风扇名称前的旧模块，源码虽已更新，新标签须待长测结束后下一次安全启动才会在实体屏显示。此仓库不包含驱动二进制、fnOS 安装包、私钥、密码、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识。
 
 ## 文件
 
 - `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py`：当前前屏。由本机未跟踪的 `drives.json` 加载硬盘标识；缺失时仍可运行，只是不显示逐盘温度。`r1_panel_buttons.py` 是 10 月 5 日旧稳定版。
+- `ui_preview.py` / `UI-LOCK-20261008.md` / `UI-PREVIEW.md`：只在本机回环地址运行的无硬件模拟预览与布局记录，不连接 R1，也不能代替实体屏验收。
 - `r1_fan_curve.py` / `r1_fan_control_ipc.py`：保守软件温控与屏幕模式请求；风扇停转或传感器缺失时请求全速。
 - `r1-panel.service` / `r1-fan-curve.service` / `r1-web.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
 - `r1_hardware.py` / `r1_hardware_probe.py`：早期只读硬件探测与离线计算，不属于常驻服务。
@@ -32,6 +33,6 @@ PVE 已启用 `r1-panel.service`、`r1-fan-curve.service`、`r1-web.service`，�
 
 本项目没有把 R1 Toolbox 的 fnOS 包安装到 PVE，也没有复制其专有程序或强制 `force_id=0x8628`。本机识别到的芯片是 IT8613E；第三方 `it87` 驱动使用固定源码版本构建和哈希校验，二进制不在仓库内。内核升级后必须重新验证/构建，不能假定可直接复用。
 
-只停止前屏：`systemctl disable --now r1-panel.service`，确认控制台和背光恢复；这不会停止温控。若要回退旧屏幕版，先停当前服务，再从 `stable-2026-10-03-swipe-cache` 取旧代码。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
+只停止前屏：`systemctl stop r1-panel.service`，确认控制台和背光恢复；这不会停止温控。目前前屏本来就是 disabled，不要把旧文档里的 enabled 状态照搬。若要回退旧屏幕版，先停当前服务，再从 `stable-2026-10-03-swipe-cache` 取旧代码。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
 
 离线验证：在项目虚拟环境内运行 `.venv/bin/python -m unittest discover -s tests -v`。驱动探测、I²C 写入和现场画面效果必须分别实测，单元测试不能替代硬件验证。
