@@ -62,10 +62,13 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(gesture((80, 350), (230, 470)), [])
 
     def test_view_cycle(self):
-        self.assertEqual([shifted_state(state, -120) for state in ("panel", "fans", "off")],
-                         ["fans", "off", "panel"])
-        self.assertEqual([shifted_state(state, 120) for state in ("panel", "fans", "off")],
-                         ["off", "panel", "fans"])
+        states = ("panel", "fans", "console", "off")
+        self.assertEqual([shifted_state(state, -120) for state in states],
+                         ["fans", "console", "off", "panel"])
+        self.assertEqual([shifted_state(state, 120) for state in states],
+                         ["off", "panel", "fans", "console"])
+        self.assertEqual(shifted_state("console", -120), "off")
+        self.assertEqual(shifted_state("off", 120), "console")
 
 
 class FanReadingTests(unittest.TestCase):

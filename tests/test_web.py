@@ -2,6 +2,8 @@
 
 import sys
 import json
+import time
+from types import ModuleType
 from http import cookies
 from http.server import ThreadingHTTPServer
 from tempfile import TemporaryDirectory
@@ -15,11 +17,139 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from r1_web import (FAILURES, Handler, SESSIONS, change_admin_password, client_allowed,
-                    hash_password, rgb_png, verify_password)  # noqa: E402
+                    collect_public_frames, configured_public_drives, hash_password, public_snapshot, rgb_png,
+                    verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
+from ui_preview import preview_web_source  # noqa: E402
 
 
 class WebTests(unittest.TestCase):
+    def test_public_drive_mapping_falls_back_to_installed_panel_mapping(self):
+        installed = ModuleType("r1_panel_buttons")
+        installed.DRIVES = (("label", "by-id"),)
+        with patch("r1_web.panel_repo.DRIVES", ()), patch.dict(sys.modules, {"r1_panel_buttons": installed}):
+            self.assertEqual(configured_public_drives(), (("label", "by-id"),))
+
+    def test_public_snapshot_masks_serials_and_vm_names(self):
+        with (patch("r1_web.panel_repo.DRIVES", (("secret disk label", "disk-id"),)),
+              patch("r1_web.panel_repo.memory", return_value=(16, 8)),
+              patch("r1_web.panel_repo.read_text", return_value="3600.0 0"),
+              patch("r1_web.panel_repo.temp_for_hwmon", return_value=42),
+              patch("r1_web.panel_repo.nvme_identity", return_value=("2TB", "NVME", "SECRET-NVME")),
+              patch("r1_web.panel_repo.disk_identity", return_value=("4TB", "HDD", "SECRET-DISK")),
+              patch("r1_web.panel_repo.drive_temperature", return_value=35),
+              patch("r1_web.panel_repo.cpu_usage", return_value=28),
+              patch("r1_web.panel_repo.vm_status", return_value="RUNNING"),
+              patch("r1_web.panel_repo.fan_readings", return_value=None),
+              patch("r1_web.control_status", return_value={"live": False}),
+              patch("r1_web.request", return_value={"ok": True, "rgb": [2, 255, 0, 0]})):
+            data = public_snapshot()
+        self.assertEqual([identity[2] for identity, _ in data["storage"]], ["****", "****"])
+        self.assertEqual(data["vms"], [("VM 100", "RUNNING"), ("VM 111", "RUNNING")])
+        self.assertNotIn("SECRET", json.dumps(data))
+        self.assertNotIn("secret disk label", json.dumps(data))
+        self.assertNotIn("ip", data)
+
+    def test_public_frames_render_without_physical_framebuffer(self):
+        class FakePainter:
+            views = []
+
+            def draw(self, data, view):
+                self.views.append(view)
+
+            def pixels(self):
+                return b"pixels", 4
+
+            def close(self):
+                pass
+
+        with (patch("r1_web.public_snapshot", return_value={"storage": [], "vms": []}),
+              patch("r1_web.panel_repo.Painter", FakePainter),
+              patch("r1_web.rgb_png", return_value=b"PNG"),
+              patch("r1_web.capture_frame", side_effect=AssertionError("physical framebuffer used"))):
+            result = collect_public_frames()
+        self.assertEqual(FakePainter.views, ["panel", "fans"])
+        self.assertEqual(result["panel"], b"PNG")
+        self.assertEqual(result["fans"], b"PNG")
+
+    def test_public_images_require_no_session_but_controls_still_do(self):
+        class FakeCollector:
+            def latest(self):
+                return {"panel": b"panel PNG", "fans": b"fans PNG", "updated": time.time()}, 1
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with patch("r1_web.PUBLIC_COLLECTOR", FakeCollector()), patch.dict(SESSIONS, {}, clear=True):
+                for name, expected in (("panel", b"panel PNG"), ("fans", b"fans PNG")):
+                    with urlopen(base + f"/public/{name}.png", timeout=2) as response:
+                        self.assertEqual(response.headers.get_content_type(), "image/png")
+                        self.assertEqual(response.read(), expected)
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(base + "/api/frame.png", timeout=2)
+                self.assertEqual(denied.exception.code, 401)
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(base + "/api/status", timeout=2)
+                self.assertEqual(denied.exception.code, 401)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_expired_public_frames_are_not_served(self):
+        class StaleCollector:
+            def latest(self):
+                return {"panel": b"old PNG", "updated": time.time() - 60}, 1
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        try:
+            with patch("r1_web.PUBLIC_COLLECTOR", StaleCollector()):
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(f"http://127.0.0.1:{server.server_port}/public/panel.png", timeout=2)
+                self.assertEqual(denied.exception.code, 503)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_favicon_is_public_svg_and_selected_in_page(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "r1_web.html").read_text(encoding="utf-8")
+        favicon = (root / "r1_web_favicon.svg").read_bytes()
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', source)
+        self.assertEqual(favicon, (root / "logo-options" / "r1" / "flat.svg").read_bytes())
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        try:
+            with urlopen(f"http://127.0.0.1:{server.server_port}/favicon.svg", timeout=2) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get_content_type(), "image/svg+xml")
+                self.assertEqual(response.read(), favicon)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_curve_editor_uses_percent_without_changing_raw_pwm_api(self):
+        source = (Path(__file__).resolve().parents[1] / "r1_web.html").read_text(encoding="utf-8")
+        self.assertEqual(source.count("<span>输出 %</span>"), 2)
+        self.assertIn("for(const percent of [0,25,50,75,100])", source)
+        self.assertIn("function outputPercent(pwm){return Math.round(pwm*100/255)}", source)
+        self.assertIn("pct===outputPercent(point[1])?point[1]:Math.round(pct*255/100)", source)
+        self.assertIn("cpu:readCurve('cpu'),drive:readCurve('drive')", source)
+        self.assertEqual(preview_web_source(), source)
+
     def test_source_allowlist(self):
         self.assertTrue(client_allowed("192.168.50.8"))
         self.assertTrue(client_allowed("100.101.1.1"))

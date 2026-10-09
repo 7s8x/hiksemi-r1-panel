@@ -36,9 +36,9 @@ def load_drives():
 DRIVES = load_drives()
 STOP = False
 _CPU_SAMPLE = None
-# Temporary DSI workaround: switching to tty1 can leave the physical LCD
-# showing a stale console frame even though the framebuffer keeps updating.
-SCREEN_STATES = ("panel", "fans", "off")
+# Keep console opposite the dark page: switching directly from a black fbdev
+# frame to tty1 showed only a cursor in the first guarded four-page trial.
+SCREEN_STATES = ("panel", "fans", "console", "off")
 RGB = RgbControl()
 
 
@@ -764,6 +764,12 @@ def run_touch(painter, initial_view="panel"):
             def show_off():
                 # Paint black and extinguish the backlight without resetting
                 # the DSI link; blank/unblank can leave the LCD scanout stale.
+                # If tty1 owns fb0, blacking it out and then calling chvt 1
+                # again cannot redraw the console. Keep the dark page on tty2.
+                if state == "console":
+                    (backlight / "brightness").write_text("0")
+                    switch_vt(2)
+                    set_tty2_cursor(False)
                 painter.rect(0, 0, WIDTH, HEIGHT, (0, 0, 0))
                 painter.lib.cairo_surface_flush(painter.surface)
                 blit()

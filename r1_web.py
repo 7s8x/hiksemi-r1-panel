@@ -28,7 +28,8 @@ import zlib
 
 from r1_fan_config import CONFIG_FILE, DEFAULT, digest, load, save, validate
 from r1_fan_control_ipc import control_status, request_mode
-from r1_panel_runtime import read_state, request
+from r1_panel_runtime import SnapshotCollector, read_state, request
+import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
 
 
@@ -41,12 +42,14 @@ RGB_VERIFIED = STATE_DIR / "rgb-verified"
 ALLOWED = tuple(ipaddress.ip_network(value) for value in
                 ("192.168.50.0/24", "100.64.0.0/10", "127.0.0.1/32"))
 HTML = Path(__file__).with_name("r1_web.html")
+FAVICON = Path(__file__).with_name("r1_web_favicon.svg")
 SESSIONS: dict[str, tuple[float, str]] = {}
 FAILURES: dict[str, list[float]] = {}
 AUTH_LOCK = threading.Lock()
 FRAME_LOCK = threading.Lock()
 CONFIG_LOCK = threading.Lock()
 FRAME_CACHE: tuple[float, str, bytes] | None = None
+PUBLIC_COLLECTOR: SnapshotCollector | None = None
 
 
 def hash_password(password: str, salt: bytes | None = None) -> dict:
@@ -161,6 +164,73 @@ def capture_frame(state: str) -> bytes:
         return encoded
 
 
+def configured_public_drives() -> tuple:
+    """Use the same on-host disk mapping as the running panel, if configured."""
+    if panel_repo.DRIVES:
+        return panel_repo.DRIVES
+    try:
+        from r1_panel_buttons import DRIVES as installed_drives
+    except ImportError:
+        return ()
+    return tuple(installed_drives)
+
+
+def public_snapshot() -> dict:
+    """Collect read-only data without exposing disk serials or VM names."""
+    total, used = panel_repo.memory()
+    try:
+        uptime = int(float(panel_repo.read_text("/proc/uptime").split()[0]))
+    except (ValueError, IndexError):
+        uptime = 0
+    nvme_temp = panel_repo.temp_for_hwmon("nvme")
+    nvme_size, nvme_kind, _ = panel_repo.nvme_identity()
+    storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
+    drive_temps = []
+    for _, disk in configured_public_drives():
+        temperature = panel_repo.drive_temperature(disk)
+        size, kind, _ = panel_repo.disk_identity(disk)
+        storage.append(((size, kind, "****"), temperature))
+        drive_temps.append(("DRIVE", temperature))
+    rgb = None
+    try:
+        response = request({"action": "rgb_state", "value": None})
+        if response.get("ok") and isinstance(response.get("rgb"), list):
+            rgb = response["rgb"][0] != 0
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    return {
+        "cpu": panel_repo.temp_for_hwmon("coretemp"),
+        "cpu_usage": panel_repo.cpu_usage(),
+        "drives": drive_temps,
+        "storage": storage,
+        "mem_total": total,
+        "mem_used": used,
+        "uptime": uptime,
+        "vms": [(f"VM {vmid}", panel_repo.vm_status(vmid)) for vmid in (100, 111)],
+        "fans": panel_repo.fan_readings(),
+        "control": control_status(),
+        "rgb": rgb,
+        "captured_at": time.monotonic(),
+        "clock": time.strftime("%H:%M"),
+    }
+
+
+def collect_public_frames() -> dict:
+    """Render two independent images in memory; never touch the physical display."""
+    data = public_snapshot()
+    frames = {}
+    for view in ("panel", "fans"):
+        painter = panel_repo.Painter()
+        try:
+            painter.draw(data, view=view)
+            pixels, stride = painter.pixels()
+            frames[view] = rgb_png(pixels, stride)
+        finally:
+            painter.close()
+    frames["updated"] = time.time()
+    return frames
+
+
 def client_allowed(address: str) -> bool:
     try:
         ip = ipaddress.ip_address(address)
@@ -231,6 +301,17 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             self._send(200, HTML.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path == "/favicon.svg":
+            self._send(200, FAVICON.read_bytes(), "image/svg+xml")
+            return
+        if path in ("/public/panel.png", "/public/fans.png"):
+            frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
+            view = "panel" if path.endswith("panel.png") else "fans"
+            if time.time() - frames.get("updated", 0) > 45 or view not in frames:
+                self._json(503, {"error": "public display unavailable"})
+                return
+            self._send(200, frames[view], "image/png")
             return
         session = self._session()
         if session is None:
@@ -368,6 +449,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global PUBLIC_COLLECTOR
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("init", "serve"))
     parser.add_argument("--host", default="192.168.50.3")
@@ -384,7 +466,13 @@ def main():
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
     server.socket = context.wrap_socket(server.socket, server_side=True)
-    server.serve_forever(poll_interval=0.5)
+    PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15)
+    PUBLIC_COLLECTOR.start()
+    try:
+        server.serve_forever(poll_interval=0.5)
+    finally:
+        PUBLIC_COLLECTOR.stop()
+        server.server_close()
 
 
 if __name__ == "__main__":

@@ -38,44 +38,8 @@ STATE = PreviewState()
 
 
 def preview_web_source() -> str:
-    """Adapt display units in the served copy; never edit production Web code."""
-    source = (ROOT / "r1_web.html").read_text(encoding="utf-8")
-    replacements = (
-        ("纵轴为 PWM 原始值", "纵轴为风扇输出百分比（0%–100%）"),
-        ("CPU 95°C、磁盘 60°C 前必须达到 255", "CPU 95°C、磁盘 60°C 前必须达到 100%"),
-        ("<span>PWM</span>", "<span>输出 %</span>"),
-        ('aria-label="CPU 温度和 PWM 曲线"', 'aria-label="CPU 温度和风扇输出百分比曲线"'),
-        ('aria-label="磁盘温度和 PWM 曲线"', 'aria-label="磁盘温度和风扇输出百分比曲线"'),
-        ("function yAt(pwm){return plotBox.bottom-(pwm-120)*(plotBox.bottom-plotBox.top)/135}",
-         "function yAt(pwm){return plotBox.bottom-pwm*(plotBox.bottom-plotBox.top)/255}"),
-        ("for(const pwm of [120,160,200,255])", "for(const pwm of [0,64,128,191,255])"),
-        ("},pwm))", "},Math.round(pwm*100/255)+'%'))"),
-        ("},'PWM'))", "},'输出 %'))"),
-        ("pwm.min=120;pwm.max=255;temp.value=point[0];pwm.value=point[1]",
-         "pwm.min=47;pwm.max=100;temp.value=point[0];pwm.value=Math.round(point[1]*100/255)"),
-        ("pwm.setAttribute('aria-label',`节点 ${index+1} PWM`)",
-         "pwm.setAttribute('aria-label',`节点 ${index+1} 输出百分比`)"),
-        ("const t=Number(temp.value),p=Number(pwm.value);",
-         "const t=Number(temp.value),pct=Number(pwm.value),p=Math.round(pct*255/100);"),
-        ("if(!Number.isInteger(t)||!Number.isInteger(p))",
-         "if(!Number.isInteger(t)||!Number.isInteger(pct)||pct<47||pct>100)"),
-        ("请输入整数温度和 PWM", "请输入整数温度和输出百分比（47%–100%）"),
-        ("row.children[1].value=pwm", "row.children[1].value=Math.round(pwm*100/255)"),
-        ("let pwm=Math.round(120+(plotBox.bottom-y)*135/(plotBox.bottom-plotBox.top))",
-         "let pwm=Math.round((plotBox.bottom-y)*255/(plotBox.bottom-plotBox.top))"),
-        ("PWM 不得下降", "输出百分比不得下降"),
-        ("前达到 PWM 255", "前达到 100%"),
-        ("`${temp}°C，PWM ${pwm}；可拖动节点`",
-         "`${temp}°C，输出 ${Math.round(pwm*100/255)}%；可拖动节点`"),
-        ("`${temp}°C / PWM ${pwm}`", "`${temp}°C / ${Math.round(pwm*100/255)}%`"),
-        ("`当前 ${fan.mode==='full'?'全速':'自动'} · PWM ${fan.pwm}",
-         "`当前 ${fan.mode==='full'?'全速':'自动'} · 输出 ${Math.round(fan.pwm*100/255)}%"),
-    )
-    for before, after in replacements:
-        if before not in source:
-            raise RuntimeError(f"preview display patch missing: {before[:60]}")
-        source = source.replace(before, after)
-    return source
+    """Serve the same percentage-based editor as production, with mock APIs."""
+    return (ROOT / "r1_web.html").read_text(encoding="utf-8")
 
 
 def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
@@ -298,7 +262,37 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed():
             return
         path = urlsplit(self.path).path
-        if path == "/":
+        logo_names = {"r1-mark", "fan", "thermal", "panel"}
+        r1_logo_names = {"neon", "flat", "light", "mono"}
+        if path == "/logo-options/r1/":
+            self._send(200, (ROOT / "logo-options" / "r1" / "index.html").read_bytes(),
+                       "text/html; charset=utf-8")
+        elif path.startswith("/logo-options/r1/") and path.endswith(".svg") and path.rsplit("/", 1)[-1][:-4] in r1_logo_names:
+            name = path.rsplit("/", 1)[-1]
+            self._send(200, (ROOT / "logo-options" / "r1" / name).read_bytes(), "image/svg+xml")
+        elif path == "/logo-options/":
+            self._send(200, (ROOT / "logo-options" / "index.html").read_bytes(),
+                       "text/html; charset=utf-8")
+        elif path.startswith("/logo-options/") and path.endswith(".svg") and path.rsplit("/", 1)[-1][:-4] in logo_names:
+            name = path.rsplit("/", 1)[-1]
+            self._send(200, (ROOT / "logo-options" / name).read_bytes(), "image/svg+xml")
+        elif path == "/favicon.svg":
+            self._send(200, (ROOT / "r1_web_favicon.svg").read_bytes(), "image/svg+xml")
+        elif path == "/public-demo/":
+            source = preview_web_source().replace(
+                "<body>",
+                '<body><div class="demo-notice">本地免登录看板模拟 · 非 R1 实时数据</div>'
+                '<style>.demo-notice{padding:10px 18px;background:#9b5128;color:white;'
+                'text-align:center;font-weight:700}</style>',
+                1,
+            )
+            source = source.replace(
+                "api('/api/status').then(data=>{csrf=data.csrf;$('public').classList.add('hide');$('login').classList.add('hide');$('app').classList.remove('hide');refresh()}).catch(()=>{});",
+                "",
+                1,
+            )
+            self._send(200, source.encode("utf-8"), "text/html; charset=utf-8")
+        elif path == "/":
             source = preview_web_source()
             notice = (
                 '<div class="demo-notice">本地模拟预览 · 所有读数与按钮均为演示，'
@@ -331,7 +325,19 @@ class Handler(BaseHTTPRequestHandler):
             source = source.replace("实体屏实时镜像 · 风扇与灯光设置", "模拟前屏 · 信息页布局草稿", 1)
             source = source.replace("<h2>实体屏</h2>", "<h2>模拟前屏</h2>", 1)
             self._send(200, source.encode("utf-8"), "text/html; charset=utf-8")
+        elif path == "/public/panel.png":
+            image = overview_svg(time.strftime("%H:%M"), "original")
+            for secret in (b"DEMO-NVME-01", b"DEMO-HDD-01", b"DEMO-HDD-02",
+                           b"DEMO-SSD-01", b"DEMO-HDD-03"):
+                image = image.replace(secret, b"****")
+            image = image.replace(b"Synology", b"VM 100").replace(b"ImmortalWrt", b"VM 111")
+            self._send(200, image, "image/svg+xml")
+        elif path == "/public/fans.png":
+            self._send(200, fan_svg(time.strftime("%H:%M"), 120, False, False), "image/svg+xml")
         elif path == "/api/status":
+            if self.headers.get("Referer", "").endswith("/public-demo/"):
+                self._json(401, {"error": "login required"})
+                return
             remaining = max(0, round(STATE.full_until - time.monotonic()))
             if not remaining:
                 STATE.fan_mode = "auto"
