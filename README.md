@@ -1,4 +1,12 @@
-# HIKSEMI R1 · PVE 前屏 1.0.0
+# HIKSEMI R1 · PVE 前屏
+
+## 当前版（2026-10-24）
+
+前屏与登录后的 Web 镜像按“信息页→风扇页→PVE 控制台→黑屏”循环；未登录 Web 仅提供脱敏的信息、风扇双页只读预览。新盘发现不再依赖固定序列号或 `drives.json`：显示顺序固定为 NVMe、BAY 1、BAY 2、BAY 3、BAY 4；R1 的 SATA 盘位按控制器物理路径映射，换盘后自动读取容量、类型、序列号与温度。盘位路径缺失时标为 `UNVERIFIED`，不把别的盘冒充该盘位。公开预览遮蔽序列号并只显示 VM 编号。
+
+2026-10-24 现场验收：五张硬盘卡片（含新 1TB HDD 温度）和固定盘位顺序显示正常；用户确认实体屏四页双向滑动、黑屏返回控制台、画面刷新正常。前屏、Web、独立温控服务保持 active/enabled；57 项离线测试通过。整机再次重启后的显示尚未验证。`stable-v1.0.0` 为此前验收的不可变基线；下文的 1.0.0 记录保留为历史说明，不代表当前代码仍使用固定盘表。
+
+## 1.0.0 历史基线
 
 本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。1.0.0 对应 2026-10-09 现场验收并已在 R1 运行的版本；旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。版本号只表示当前功能基线，不保证整机重启和所有长期显示故障已得到验证。
 
@@ -15,7 +23,7 @@
 
 ## 文件
 
-- `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py`：当前前屏。由本机未跟踪的 `drives.json` 加载硬盘标识；缺失时仍可运行，只是不显示逐盘温度。`r1_panel_buttons.py` 是 10 月 5 日旧稳定版。
+- `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py`：当前前屏。运行时从系统路径发现 NVMe 与各实体盘位，不依赖 `drives.json`。`r1_panel_buttons.py` 是 10 月 5 日旧稳定版。
 - `ui_preview.py` / `UI-LOCK-20261008.md` / `UI-PREVIEW.md`：只在本机回环地址运行的无硬件模拟预览与布局记录，不连接 R1，也不能代替实体屏验收。
 - `r1_fan_curve.py` / `r1_fan_control_ipc.py`：保守软件温控与屏幕模式请求；风扇停转或传感器缺失时请求全速。
 - `r1-panel.service` / `r1-fan-curve.service` / `r1-web.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
@@ -27,7 +35,7 @@
 - `experiments/`：当次风扇通道验证、回退和采样脚本，含当次主机 PWM/背光基线；只作为历史复现资料，不是通用安装程序。
 - `tests/`：不接触真实硬件的手势、风扇读数、RGB 回退测试。
 
-不要提交 `drives.json`，可用 `drives.example.json` 作为格式参考。RGB 开关不控制风扇；温控服务独立于前屏和 Web 运行。Web 仅监听已配置的家庭 IPv4 地址并要求 HTTPS 登录，但应用层来源限制不能替代 PVE 主机防火墙。
+不要提交主机专属盘表、真实序列号或任何凭据；`drives.example.json` 仅是历史格式参考。RGB 开关不控制风扇；温控服务独立于前屏和 Web 运行。Web 仅监听已配置的家庭 IPv4 地址，管理功能要求 HTTPS 登录，但应用层来源限制不能替代 PVE 主机防火墙。
 
 ## 安全边界与回退
 

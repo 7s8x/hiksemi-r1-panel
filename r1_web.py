@@ -164,17 +164,6 @@ def capture_frame(state: str) -> bytes:
         return encoded
 
 
-def configured_public_drives() -> tuple:
-    """Use the same on-host disk mapping as the running panel, if configured."""
-    if panel_repo.DRIVES:
-        return panel_repo.DRIVES
-    try:
-        from r1_panel_buttons import DRIVES as installed_drives
-    except ImportError:
-        return ()
-    return tuple(installed_drives)
-
-
 def public_snapshot() -> dict:
     """Collect read-only data without exposing disk serials or VM names."""
     total, used = panel_repo.memory()
@@ -186,11 +175,15 @@ def public_snapshot() -> dict:
     nvme_size, nvme_kind, _ = panel_repo.nvme_identity()
     storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
     drive_temps = []
-    for _, disk in configured_public_drives():
+    for bay, (_, disk) in enumerate(panel_repo.discover_drives(), start=1):
+        label = f"BAY {bay}"
+        if disk is None:
+            storage.append(((label, "UNVERIFIED", "--"), None))
+            continue
         temperature = panel_repo.drive_temperature(disk)
-        size, kind, _ = panel_repo.disk_identity(disk)
+        size, kind, _ = panel_repo.bay_identity(label, disk)
         storage.append(((size, kind, "****"), temperature))
-        drive_temps.append(("DRIVE", temperature))
+        drive_temps.append((label, temperature))
     rgb = None
     try:
         response = request({"action": "rgb_state", "value": None})
@@ -409,8 +402,6 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/panel":
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")
-                if body == {"action": "page", "value": "console"}:
-                    raise ValueError("console page temporarily disabled due to DSI display fault")
                 result = request(body)
                 self._json(200 if result.get("ok") else 400, result)
             elif path == "/api/fan/mode":

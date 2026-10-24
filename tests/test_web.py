@@ -3,7 +3,6 @@
 import sys
 import json
 import time
-from types import ModuleType
 from http import cookies
 from http.server import ThreadingHTTPServer
 from tempfile import TemporaryDirectory
@@ -17,21 +16,15 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from r1_web import (FAILURES, Handler, SESSIONS, change_admin_password, client_allowed,
-                    collect_public_frames, configured_public_drives, hash_password, public_snapshot, rgb_png,
+                    collect_public_frames, hash_password, public_snapshot, rgb_png,
                     verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
 from ui_preview import preview_web_source  # noqa: E402
 
 
 class WebTests(unittest.TestCase):
-    def test_public_drive_mapping_falls_back_to_installed_panel_mapping(self):
-        installed = ModuleType("r1_panel_buttons")
-        installed.DRIVES = (("label", "by-id"),)
-        with patch("r1_web.panel_repo.DRIVES", ()), patch.dict(sys.modules, {"r1_panel_buttons": installed}):
-            self.assertEqual(configured_public_drives(), (("label", "by-id"),))
-
     def test_public_snapshot_masks_serials_and_vm_names(self):
-        with (patch("r1_web.panel_repo.DRIVES", (("secret disk label", "disk-id"),)),
+        with (patch("r1_web.panel_repo.discover_drives", return_value=(("secret disk label", "disk-id"),)),
               patch("r1_web.panel_repo.memory", return_value=(16, 8)),
               patch("r1_web.panel_repo.read_text", return_value="3600.0 0"),
               patch("r1_web.panel_repo.temp_for_hwmon", return_value=42),
@@ -136,6 +129,48 @@ class WebTests(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers.get_content_type(), "image/svg+xml")
                 self.assertEqual(response.read(), favicon)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_console_page_matches_physical_order_and_requires_admin_session(self):
+        source = (Path(__file__).resolve().parents[1] / "r1_web.html").read_text(encoding="utf-8")
+        buttons = [f'data-page="{page}"' for page in ("panel", "fans", "console", "off")]
+        self.assertEqual([source.index(button) for button in buttons],
+                         sorted(source.index(button) for button in buttons))
+        self.assertIn("控制台画面仅供查看", source)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        command = {"action": "page", "value": "console"}
+
+        def submit(cookie=None, csrf=None):
+            headers = {"Content-Type": "application/json",
+                       "Origin": f"https://127.0.0.1:{server.server_port}"}
+            if cookie:
+                headers["Cookie"] = cookie
+            if csrf:
+                headers["X-R1-CSRF"] = csrf
+            request = Request(base + "/api/panel", data=json.dumps(command).encode(), headers=headers)
+            try:
+                response = urlopen(request, timeout=2)
+            except HTTPError as error:
+                response = error
+            with response:
+                return response.status
+
+        try:
+            with patch.dict(SESSIONS, {"test": (time.time() + 60, "csrf")}, clear=True), \
+                    patch("r1_web.request", return_value={"ok": True}) as panel_request:
+                self.assertEqual(submit(), 401)
+                self.assertEqual(submit("r1session=test"), 403)
+                self.assertEqual(submit("r1session=test", "csrf"), 200)
+                panel_request.assert_called_once_with(command)
         finally:
             server.shutdown()
             server.server_close()

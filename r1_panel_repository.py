@@ -23,17 +23,45 @@ from r1_panel_runtime import MAX_COMMAND, SnapshotCollector, open_control, publi
 
 WIDTH = 376
 HEIGHT = 960
-def load_drives():
-    """Load machine-specific disk IDs from a local, untracked JSON file."""
-    path = Path(__file__).with_name("drives.json")
-    try:
-        records = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ()
-    return tuple((item["label"], item["by_id"]) for item in records)
+BAY_PORTS = ((1, 4), (2, 3), (3, 2), (4, 1))
+BAY_CONTROLLER = "0000:04:00.0"
 
 
-DRIVES = load_drives()
+def discover_drives(block_root=Path("/sys/block"), by_id_root=Path("/dev/disk/by-id"),
+                    by_path_root=Path("/dev/disk/by-path")):
+    """Return all four R1 bays in physical order; an absent path is unverified."""
+    stable_ids = {}
+    for link in sorted(by_id_root.glob("ata-*")):
+        if "-part" in link.name or not link.is_symlink():
+            continue
+        try:
+            stable_ids.setdefault(link.resolve(strict=True).name, link.name)
+        except (OSError, RuntimeError):
+            continue
+    found = []
+    for bay, port in BAY_PORTS:
+        link = by_path_root / f"pci-{BAY_CONTROLLER}-ata-{port}.0"
+        disk = None
+        try:
+            name = link.resolve(strict=True).name
+            block = block_root / name
+            device = (block / "device").resolve(strict=True)
+            if (name.startswith("sd") and block.is_dir() and
+                    BAY_CONTROLLER in device.parts and f"ata{port}" in device.parts):
+                disk = stable_ids.get(name, f"/dev/{name}")
+        except (OSError, RuntimeError):
+            pass
+        found.append((f"BAY {bay}", disk))
+    return tuple(found)
+
+
+def bay_identity(label, disk):
+    if disk is None:
+        return label, "UNVERIFIED", "--"
+    size, kind, serial = disk_identity(disk)
+    return f"{label}  {size}", kind, serial
+
+
 STOP = False
 _CPU_SAMPLE = None
 # Keep console opposite the dark page: switching directly from a black fbdev
@@ -192,6 +220,10 @@ def network_address():
 
 def snapshot():
     total, used = memory()
+    disks = discover_drives()
+    disk_readings = [(label, bay_identity(label, disk),
+                      drive_temperature(disk) if disk is not None else None)
+                     for label, disk in disks]
     try:
         uptime = int(float(read_text("/proc/uptime").split()[0]))
     except (ValueError, IndexError):
@@ -200,9 +232,10 @@ def snapshot():
         "cpu": temp_for_hwmon("coretemp"),
         "cpu_usage": cpu_usage(),
         "nvme": temp_for_hwmon("nvme"),
-        "drives": [(label, drive_temperature(disk)) for label, disk in DRIVES],
+        "drives": [(label, temperature) for label, identity, temperature in disk_readings
+                   if identity[1] != "UNVERIFIED"],
         "storage": [(nvme_identity(), temp_for_hwmon("nvme"))] +
-                   [(disk_identity(disk), drive_temperature(disk)) for _, disk in DRIVES],
+                   [(identity, temperature) for _, identity, temperature in disk_readings],
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,
@@ -444,8 +477,8 @@ class Painter:
             size, kind, serial = identity
             y = 384 + index * 80
             self.round_rect(20, y, 336, 76, panel)
-            self.text(36, y + 30, f"{size}  {kind}", 18, fg, True)
-            self.text(36, y + 58, f"SN {str(serial)[:22]}", 11, muted)
+            self.text(36, y + 30, size if kind == "UNVERIFIED" else f"{size}  {kind}", 18, fg, True)
+            self.text(36, y + 58, "NO DRIVE / CHECK PATH" if kind == "UNVERIFIED" else f"SN {str(serial)[:22]}", 11, muted)
             self.text_right(303, y + 50, "--" if temperature is None else f"{temperature:.0f}", 34, cyan, True)
             self.text(307, y + 49, "°C", 17, cyan, True)
         self.text(24, 808, "SYSTEM", 17, fg, True)
