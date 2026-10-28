@@ -19,6 +19,7 @@ import time
 from r1_fan_control_ipc import control_status, request_mode
 from r1_rgb_control import RgbControl
 from r1_panel_runtime import MAX_COMMAND, SnapshotCollector, open_control, publish_state
+from r1_storage_usage import storage_usage
 
 
 WIDTH = 376
@@ -221,6 +222,7 @@ def network_address():
 def snapshot():
     total, used = memory()
     disks = discover_drives()
+    usage = storage_usage(disks)
     disk_readings = [(label, bay_identity(label, disk),
                       drive_temperature(disk) if disk is not None else None)
                      for label, disk in disks]
@@ -236,6 +238,7 @@ def snapshot():
                    if identity[1] != "UNVERIFIED"],
         "storage": [(nvme_identity(), temp_for_hwmon("nvme"))] +
                    [(identity, temperature) for _, identity, temperature in disk_readings],
+        "storage_usage": usage,
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,
@@ -473,12 +476,22 @@ class Painter:
                   11, amber if stale else muted)
         self.text(24, 367, "HARDWARE TEMPERATURE", 17, fg, True)
         storage = data.get("storage") or []
+        storage_usage_values = data.get("storage_usage") or []
         for index, (identity, temperature) in enumerate(storage[:5]):
-            size, kind, serial = identity
+            size, kind, _ = identity
             y = 384 + index * 80
             self.round_rect(20, y, 336, 76, panel)
             self.text(36, y + 30, size if kind == "UNVERIFIED" else f"{size}  {kind}", 18, fg, True)
-            self.text(36, y + 58, "NO DRIVE / CHECK PATH" if kind == "UNVERIFIED" else f"SN {str(serial)[:22]}", 11, muted)
+            percent = storage_usage_values[index] if index < len(storage_usage_values) else None
+            if kind == "UNVERIFIED":
+                self.text(36, y + 57, "NO DRIVE / CHECK PATH", 11, muted)
+            else:
+                self.text(36, y + 56, "USED", 11, muted)
+                self.text(78, y + 57, "--" if percent is None else f"{percent}%",
+                          16, muted if percent is None else green, True)
+                self.rect(36, y + 65, 146, 4, (31, 56, 68))
+                if percent is not None:
+                    self.rect(36, y + 65, round(146 * max(0, min(100, percent)) / 100), 4, green)
             self.text_right(303, y + 50, "--" if temperature is None else f"{temperature:.0f}", 34, cyan, True)
             self.text(307, y + 49, "°C", 17, cyan, True)
         self.text(24, 808, "SYSTEM", 17, fg, True)

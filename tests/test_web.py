@@ -31,6 +31,7 @@ class WebTests(unittest.TestCase):
               patch("r1_web.panel_repo.nvme_identity", return_value=("2TB", "NVME", "SECRET-NVME")),
               patch("r1_web.panel_repo.disk_identity", return_value=("4TB", "HDD", "SECRET-DISK")),
               patch("r1_web.panel_repo.drive_temperature", return_value=35),
+              patch("r1_web.panel_repo.storage_usage", return_value=[6, 87]),
               patch("r1_web.panel_repo.cpu_usage", return_value=28),
               patch("r1_web.panel_repo.vm_status", return_value="RUNNING"),
               patch("r1_web.panel_repo.fan_readings", return_value=None),
@@ -38,6 +39,7 @@ class WebTests(unittest.TestCase):
               patch("r1_web.request", return_value={"ok": True, "rgb": [2, 255, 0, 0]})):
             data = public_snapshot()
         self.assertEqual([identity[2] for identity, _ in data["storage"]], ["****", "****"])
+        self.assertEqual(data["storage_usage"], [6, 87])
         self.assertEqual(data["vms"], [("VM 100", "RUNNING"), ("VM 111", "RUNNING")])
         self.assertNotIn("SECRET", json.dumps(data))
         self.assertNotIn("secret disk label", json.dumps(data))

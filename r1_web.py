@@ -175,7 +175,8 @@ def public_snapshot() -> dict:
     nvme_size, nvme_kind, _ = panel_repo.nvme_identity()
     storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
     drive_temps = []
-    for bay, (_, disk) in enumerate(panel_repo.discover_drives(), start=1):
+    disks = panel_repo.discover_drives()
+    for bay, (_, disk) in enumerate(disks, start=1):
         label = f"BAY {bay}"
         if disk is None:
             storage.append(((label, "UNVERIFIED", "--"), None))
@@ -184,6 +185,7 @@ def public_snapshot() -> dict:
         size, kind, _ = panel_repo.bay_identity(label, disk)
         storage.append(((size, kind, "****"), temperature))
         drive_temps.append((label, temperature))
+    usage = panel_repo.storage_usage(disks)
     rgb = None
     try:
         response = request({"action": "rgb_state", "value": None})
@@ -196,6 +198,7 @@ def public_snapshot() -> dict:
         "cpu_usage": panel_repo.cpu_usage(),
         "drives": drive_temps,
         "storage": storage,
+        "storage_usage": usage,
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,

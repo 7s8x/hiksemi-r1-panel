@@ -48,6 +48,7 @@ class DiskDiscoveryTests(unittest.TestCase):
                     side_effect=lambda disk: ("1TB", "HDD", disk)),
               patch("r1_panel_repository.drive_temperature",
                     side_effect=lambda disk: 32 if disk == "old" else 36),
+              patch("r1_panel_repository.storage_usage", return_value=[6, 4]),
               patch("r1_panel_repository.memory", return_value=(16, 8)),
               patch("r1_panel_repository.read_text", return_value="3600.0"),
               patch("r1_panel_repository.temp_for_hwmon", return_value=42),
@@ -61,6 +62,7 @@ class DiskDiscoveryTests(unittest.TestCase):
             first, second = snapshot(), snapshot()
         self.assertEqual(first["storage"][1], (("BAY 1  1TB", "HDD", "old"), 32))
         self.assertEqual(second["storage"][1], (("BAY 1  1TB", "HDD", "new"), 36))
+        self.assertEqual(second["storage_usage"], [6, 4])
 
 
 if __name__ == "__main__":

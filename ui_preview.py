@@ -60,11 +60,11 @@ def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
         parts.append(f'<text x="{x}" y="{y}" fill="{color}" font-size="{size}" font-weight="{weight}">{escape(str(value))}</text>')
 
     disks = [
-        ("2TB  NVME", "SN DEMO-NVME-01", 43),
-        ("4TB  HDD", "SN DEMO-HDD-01", 34),
-        ("4TB  HDD", "SN DEMO-HDD-02", 36),
-        ("2TB  SSD", "SN DEMO-SSD-01", 37),
-        ("500GB  HDD", "SN DEMO-HDD-03", 32),
+        ("2TB  NVME", 6, 43),
+        ("4TB  HDD", 40, 34),
+        ("4TB  HDD", 87, 36),
+        ("2TB  SSD", 4, 37),
+        ("1TB  HDD", 97, 32),
     ]
 
     def system_cards(offset=0):
@@ -103,11 +103,14 @@ def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
         rect(207, 295, 74, 6, amber)
         label(40, 324, "SIMULATED DATA / 15 SEC REFRESH", 11, muted)
         label(24, 367, "HARDWARE TEMPERATURE", 17, fg, "bold")
-        for index, (identity, serial, temperature) in enumerate(disks):
+        for index, (identity, used, temperature) in enumerate(disks):
             y = 384 + index * 80
             rect(20, y, 336, 76, panel, 6)
             label(36, y + 30, identity, 18, fg, "bold")
-            label(36, y + 58, serial, 11, muted)
+            label(36, y + 57, "USED", 11, muted)
+            label(78, y + 57, f"{used}%", 16, green, "bold")
+            rect(36, y + 65, 146, 4, "#1f3844")
+            rect(36, y + 65, round(146 * used / 100), 4, green)
             label(251, y + 50, temperature, 34, cyan, "bold")
             label(307, y + 49, "°C", 17, cyan, "bold")
     elif variant == "focus":
@@ -130,11 +133,11 @@ def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
         rect(238, 323, 27, 6, green)
         label(40, 347, "SIMULATED DATA / 15 SEC REFRESH", 11, muted)
         label(24, 390, "DRIVE TEMPERATURE", 17, fg, "bold")
-        for index, (identity, serial, temperature) in enumerate(disks):
+        for index, (identity, used, temperature) in enumerate(disks):
             y = 408 + index * 69
             rect(20, y, 336, 61, panel, 6)
             label(36, y + 26, identity, 16, fg, "bold")
-            label(36, y + 48, serial, 11, muted)
+            label(36, y + 48, f"USED {used}%", 11, green)
             label(264, y + 39, f"{temperature}°C", 25, cyan, "bold")
     elif variant == "ranking":
         label(24, 82, "THERMAL RANKING", 25, fg, "bold")
@@ -148,11 +151,11 @@ def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
         label(254, 235, "60°C", 30, amber, "bold")
         label(24, 291, "STORAGE / SORTED BY TEMPERATURE", 15, fg, "bold")
         sorted_disks = sorted(disks, key=lambda item: item[2], reverse=True)
-        for index, (identity, serial, temperature) in enumerate(sorted_disks):
+        for index, (identity, used, temperature) in enumerate(sorted_disks):
             y = 309 + index * 89
             rect(20, y, 336, 81, panel, 6)
             label(36, y + 25, identity, 16, fg, "bold")
-            label(36, y + 48, serial, 11, muted)
+            label(36, y + 48, f"USED {used}%", 11, green)
             label(249, y + 47, f"{temperature}°C", 27, cyan, "bold")
             rect(36, y + 66, 303, 4, "#1f3844")
             rect(36, y + 66, round(303 * temperature / 80), 4, cyan)
@@ -162,7 +165,7 @@ def overview_svg(clock: str = "09:28", variant: str = "original") -> bytes:
         label(226, 112, "UPTIME  1D 16H", 13, cyan, "bold")
         label(24, 157, "TEMPERATURE / 0–80°C SCALE", 14, muted)
         readings = [("CPU PACKAGE", "USAGE 28%", 60, amber)] + [
-            (identity, serial, temperature, cyan) for identity, serial, temperature in disks
+            (identity, f"USED {used}%", temperature, cyan) for identity, used, temperature in disks
         ]
         for index, (identity, detail, temperature, color) in enumerate(readings):
             y = 177 + index * 96
