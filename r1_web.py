@@ -31,6 +31,10 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
+from r1_web_views import drive_models, render_fans, render_information, system_identity
+from r1_web_capacity import storage_capacity
+from r1_fan_curve import temperatures as fan_temperatures
+from r1_theme import CHOICES as THEMES, load_theme, save_theme
 
 
 STATE_DIR = Path("/var/lib/r1-web")
@@ -48,6 +52,7 @@ FAILURES: dict[str, list[float]] = {}
 AUTH_LOCK = threading.Lock()
 FRAME_LOCK = threading.Lock()
 CONFIG_LOCK = threading.Lock()
+THEME_LOCK = threading.Lock()
 FRAME_CACHE: tuple[float, str, bytes] | None = None
 PUBLIC_COLLECTOR: SnapshotCollector | None = None
 
@@ -176,6 +181,7 @@ def public_snapshot() -> dict:
     storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
     drive_temps = []
     disks = panel_repo.discover_drives()
+    pve_version, cpu_model = system_identity()
     for bay, (_, disk) in enumerate(disks, start=1):
         label = f"BAY {bay}"
         if disk is None:
@@ -186,6 +192,8 @@ def public_snapshot() -> dict:
         storage.append(((size, kind, "****"), temperature))
         drive_temps.append((label, temperature))
     usage = panel_repo.storage_usage(disks)
+    capacity = storage_capacity(disks)
+    fan_cpu_temp, fan_drive_temp, fan_drive_count = fan_temperatures()
     rgb = None
     try:
         response = request({"action": "rgb_state", "value": None})
@@ -195,10 +203,15 @@ def public_snapshot() -> dict:
         pass
     return {
         "cpu": panel_repo.temp_for_hwmon("coretemp"),
+        "fan_basis": (fan_cpu_temp, fan_drive_temp, fan_drive_count),
         "cpu_usage": panel_repo.cpu_usage(),
         "drives": drive_temps,
         "storage": storage,
+        "storage_models": drive_models(disks),
         "storage_usage": usage,
+        "storage_capacity": capacity,
+        "pve_version": pve_version,
+        "cpu_model": cpu_model,
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,
@@ -223,6 +236,8 @@ def collect_public_frames() -> dict:
             frames[view] = rgb_png(pixels, stride)
         finally:
             painter.close()
+    frames["panel_svg"] = render_information(data)
+    frames["fans_svg"] = render_fans(data)
     frames["updated"] = time.time()
     return frames
 
@@ -301,13 +316,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/favicon.svg":
             self._send(200, FAVICON.read_bytes(), "image/svg+xml")
             return
-        if path in ("/public/panel.png", "/public/fans.png"):
+        if path == "/api/theme":
+            self._json(200, {"theme": load_theme(), "choices": THEMES})
+            return
+        if path in ("/public/panel.png", "/public/fans.png",
+                    "/public/panel.svg", "/public/fans.svg"):
             frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
-            view = "panel" if path.endswith("panel.png") else "fans"
-            if time.time() - frames.get("updated", 0) > 45 or view not in frames:
+            view = "panel" if "/panel." in path else "fans"
+            svg = path.endswith(".svg")
+            key = view + ("_svg" if svg else "")
+            if time.time() - frames.get("updated", 0) > 45 or key not in frames:
                 self._json(503, {"error": "public display unavailable"})
                 return
-            self._send(200, frames[view], "image/png")
+            self._send(200, frames[key], "image/svg+xml" if svg else "image/png")
             return
         session = self._session()
         if session is None:
@@ -402,6 +423,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("invalid password request")
                 change_admin_password(body["current"], body["new"])
                 self._json(200, {"ok": True}, {"Set-Cookie": "r1session=; Max-Age=0; Secure; HttpOnly; SameSite=Strict; Path=/"})
+            elif path == "/api/theme":
+                if not isinstance(body, dict) or set(body) != {"theme"}:
+                    raise ValueError("invalid theme request")
+                with THEME_LOCK:
+                    save_theme(body["theme"])
+                self._json(200, {"ok": True, "theme": load_theme()})
             elif path == "/api/panel":
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")

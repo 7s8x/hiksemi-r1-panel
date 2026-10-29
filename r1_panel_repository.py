@@ -20,6 +20,10 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_rgb_control import RgbControl
 from r1_panel_runtime import MAX_COMMAND, SnapshotCollector, open_control, publish_state
 from r1_storage_usage import storage_usage
+from r1_web_capacity import storage_capacity
+from r1_web_views import drive_models, render_fans, render_information, system_identity
+from r1_fan_curve import temperatures as fan_temperatures
+from r1_svg_painter import paint_svg
 
 
 WIDTH = 376
@@ -252,6 +256,18 @@ def snapshot():
     }
 
 
+def screen_snapshot():
+    """Collect the additional display-only fields used by the accepted Web UI."""
+    data = snapshot()
+    disks = discover_drives()
+    data["storage_models"] = drive_models(disks)
+    data["storage_capacity"] = storage_capacity(disks)
+    data["pve_version"], data["cpu_model"] = system_identity()
+    data["fan_basis"] = fan_temperatures()
+    data["vms"] = [(f"VM {vmid}", status) for vmid, status in data["vms"]]
+    return data
+
+
 class Painter:
     def __init__(self):
         self.lib = ctypes.CDLL("libcairo.so.2")
@@ -318,10 +334,8 @@ class Painter:
         self.text(right - extents[4], y, value, size, rgb, bold)
 
     def draw(self, data, touch_mode=False, brightness=None, view="panel"):
-        if view == "fans":
-            self.draw_locked_fans(data)
-            return
-        self.draw_locked_panel(data)
+        svg = render_fans(data) if view == "fans" else render_information(data)
+        paint_svg(self, svg)
         return
         bg, panel, muted, fg, cyan = (9, 20, 29), (19, 40, 52), (145, 169, 180), (231, 242, 246), (103, 185, 208)
         self.rect(0, 0, WIDTH, HEIGHT, bg)
@@ -706,20 +720,20 @@ def shifted_state(current, horizontal_delta):
 
 def fan_button_mode(point):
     x, y = point
-    if 706 <= y <= 750:
-        if 30 <= x <= 180:
+    if 738 <= y <= 783:
+        if 32 <= x <= 180:
             return "full"
-        if 196 <= x <= 346:
+        if 196 <= x <= 344:
             return "auto"
     return None
 
 
 def rgb_button_action(point):
     x, y = point
-    if 896 <= y <= 940:
-        if 30 <= x <= 180:
+    if 882 <= y <= 927:
+        if 32 <= x <= 180:
             return "on"
-        if 196 <= x <= 346:
+        if 196 <= x <= 344:
             return "off"
     return None
 
@@ -736,7 +750,7 @@ def run_touch(painter, initial_view="panel"):
     step = max(1, round(maximum * 0.05))
     touch_fd = os.open(touchscreen_path(), os.O_RDONLY | os.O_NONBLOCK)
     fb_fd = os.open("/dev/fb0", os.O_RDWR)
-    collector = SnapshotCollector(snapshot)
+    collector = SnapshotCollector(screen_snapshot)
     listener = open_control()
     collector.start()
     try:
@@ -990,7 +1004,7 @@ def main():
             run_touch(painter, initial_view=args.initial_view)
             return
         if args.preview:
-            painter.draw(snapshot(), view=args.view)
+            painter.draw(screen_snapshot(), view=args.view)
             painter.png(args.preview)
             return
         fd = os.open("/dev/fb0", os.O_RDWR)
@@ -1003,7 +1017,7 @@ def main():
                         framebuffer[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
 
                 while not STOP:
-                    painter.draw(snapshot())
+                    painter.draw(screen_snapshot())
                     blit()
                     if args.once:
                         break

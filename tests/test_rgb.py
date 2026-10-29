@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from r1_rgb_trial import BASELINE, run_trial, set_state, write_byte_data  # noqa: E402
 from r1_rgb_control import RgbControl, rgb_bus_path  # noqa: E402
 try:
-    from r1_panel_repository import rgb_button_hit  # noqa: E402
+    from r1_panel_repository import rgb_button_action  # noqa: E402
 except ModuleNotFoundError:
-    from r1_panel_buttons import rgb_button_hit  # noqa: E402
+    from r1_panel_buttons import rgb_button_action  # noqa: E402
 
 
 class RgbTrialTests(unittest.TestCase):
@@ -36,10 +36,10 @@ class RgbTrialTests(unittest.TestCase):
                 rgb_bus_path(adapter)
 
     def test_screen_button_bounds(self):
-        self.assertTrue(rgb_button_hit((280, 850)))
-        self.assertTrue(rgb_button_hit((318, 881)))
-        self.assertFalse(rgb_button_hit((280, 810)))
-        self.assertFalse(rgb_button_hit((180, 850)))
+        self.assertEqual(rgb_button_action((100, 905)), "on")
+        self.assertEqual(rgb_button_action((280, 905)), "off")
+        self.assertIsNone(rgb_button_action((280, 850)))
+        self.assertIsNone(rgb_button_action((188, 918)))
 
     @patch("r1_rgb_control.os.close")
     @patch("r1_rgb_control.write_byte_data")

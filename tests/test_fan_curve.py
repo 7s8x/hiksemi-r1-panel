@@ -95,7 +95,7 @@ class FanCurveTests(unittest.TestCase):
             self, _sample, _clock, write, _mode, status, _restore):
         run(1, Path("/unused"))
         write.assert_called_once_with(Path("/unused"), 255)
-        status.assert_called_once_with("full", 255)
+        status.assert_called_once_with("full", 255, curve_id=__import__("r1_fan_config").digest(__import__("r1_fan_config").DEFAULT))
 
 
 if __name__ == "__main__":

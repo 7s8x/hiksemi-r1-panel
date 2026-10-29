@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from tempfile import TemporaryDirectory
 import threading
 import unittest
+from xml.etree import ElementTree
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -19,6 +20,7 @@ from r1_web import (FAILURES, Handler, SESSIONS, change_admin_password, client_a
                     collect_public_frames, hash_password, public_snapshot, rgb_png,
                     verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
+from r1_web_views import render_fans, render_information  # noqa: E402
 from ui_preview import preview_web_source  # noqa: E402
 
 
@@ -32,14 +34,18 @@ class WebTests(unittest.TestCase):
               patch("r1_web.panel_repo.disk_identity", return_value=("4TB", "HDD", "SECRET-DISK")),
               patch("r1_web.panel_repo.drive_temperature", return_value=35),
               patch("r1_web.panel_repo.storage_usage", return_value=[6, 87]),
+              patch("r1_web.storage_capacity", return_value=[(60_000_000_000, 940_000_000_000, 6), (870_000_000_000, 130_000_000_000, 87)]),
               patch("r1_web.panel_repo.cpu_usage", return_value=28),
               patch("r1_web.panel_repo.vm_status", return_value="RUNNING"),
               patch("r1_web.panel_repo.fan_readings", return_value=None),
+              patch("r1_web.fan_temperatures", return_value=(65, 39, 4)),
               patch("r1_web.control_status", return_value={"live": False}),
               patch("r1_web.request", return_value={"ok": True, "rgb": [2, 255, 0, 0]})):
             data = public_snapshot()
         self.assertEqual([identity[2] for identity, _ in data["storage"]], ["****", "****"])
         self.assertEqual(data["storage_usage"], [6, 87])
+        self.assertEqual(data["storage_capacity"][0], (60_000_000_000, 940_000_000_000, 6))
+        self.assertEqual(data["fan_basis"], (65, 39, 4))
         self.assertEqual(data["vms"], [("VM 100", "RUNNING"), ("VM 111", "RUNNING")])
         self.assertNotIn("SECRET", json.dumps(data))
         self.assertNotIn("secret disk label", json.dumps(data))
@@ -66,11 +72,65 @@ class WebTests(unittest.TestCase):
         self.assertEqual(FakePainter.views, ["panel", "fans"])
         self.assertEqual(result["panel"], b"PNG")
         self.assertEqual(result["fans"], b"PNG")
+        self.assertIn(b"<svg", result["panel_svg"])
+        self.assertIn(b"<svg", result["fans_svg"])
+
+    def test_web_views_escape_models_and_keep_fan_ring_semantics(self):
+        data = {
+            "clock": "12:40", "uptime": 86400, "cpu_usage": 25, "cpu": 56,
+            "storage": [(("1TB", "NVME", "****"), 42)],
+            "storage_models": ["Model <script>alert(1)</script>"],
+            "storage_usage": [6], "storage_capacity": [(60_000_000_000, 940_000_000_000, 6)],
+            "vms": [("VM 100", "RUNNING")],
+            "fans": {"fan2_input": 995, "pwm2": 120, "fan3_input": 2836, "pwm3": 120},
+            "control": {"live": True, "desired": "auto", "mode": "auto"},
+            "drives": [("BAY 1", 39)], "fan_basis": (65, 39, 4), "rgb": False,
+        }
+        panel = render_information(data).decode("utf-8")
+        fans = render_fans(data).decode("utf-8")
+        self.assertIn("Model &lt;script&gt;", panel)
+        self.assertNotIn("<script>", panel)
+        self.assertIn("已用 0.06T · 6%", panel)
+        self.assertIn("940GB 可用", panel)
+        self.assertNotIn("1TB · 940GB 可用", panel)
+        data["storage"].append((("2TB", "SSD", "****"), 39))
+        self.assertIn("BAY 1 · 2TB SSD", render_information(data).decode("utf-8"))
+        self.assertIn("VM 100", panel)
+        self.assertNotIn("Synology", panel)
+        self.assertIn("995", fans)
+        self.assertIn("47%", fans)
+        self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
+        self.assertIn("全速 1 分钟", fans)
+        self.assertIn("自动曲线", fans)
+        self.assertIn("打开灯光", fans)
+        self.assertIn("关闭灯光", fans)
+        self.assertIn("灯光已关闭", fans)
+        self.assertIn("温控依据", fans)
+        self.assertIn("BAY 1–4 最高", fans)
+        self.assertLess(fans.index("温控依据"), fans.index("风扇控制"))
+        self.assertLess(fans.index("风扇控制"), fans.index("R1 RGB 灯光"))
+        self.assertIn("65°C", fans)
+        self.assertIn("39°C", fans)
+        self.assertNotIn("温度与灯光", fans)
+        self.assertNotIn("{{", panel + fans)
+        fan_text = ElementTree.fromstring(fans).findall(".//{http://www.w3.org/2000/svg}text")
+        self.assertTrue(any(node.attrib.get("x") == "94" and node.text == "47%" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "995" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "RPM" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "自动" for node in fan_text))
+        self.assertNotIn("实际转速", fans)
+        self.assertNotIn("风扇状态", fans)
+        data["control"] = {"live": True, "desired": "full", "mode": "full"}
+        self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
+        data["fan_basis"] = (65, 39, 3)
+        self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
 
     def test_public_images_require_no_session_but_controls_still_do(self):
         class FakeCollector:
             def latest(self):
-                return {"panel": b"panel PNG", "fans": b"fans PNG", "updated": time.time()}, 1
+                return {"panel": b"panel PNG", "fans": b"fans PNG",
+                        "panel_svg": b"<svg>panel</svg>", "fans_svg": b"<svg>fans</svg>",
+                        "updated": time.time()}, 1
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True
@@ -84,12 +144,54 @@ class WebTests(unittest.TestCase):
                     with urlopen(base + f"/public/{name}.png", timeout=2) as response:
                         self.assertEqual(response.headers.get_content_type(), "image/png")
                         self.assertEqual(response.read(), expected)
+                for name in ("panel", "fans"):
+                    with urlopen(base + f"/public/{name}.svg", timeout=2) as response:
+                        self.assertEqual(response.headers.get_content_type(), "image/svg+xml")
+                        self.assertEqual(response.read(), f"<svg>{name}</svg>".encode())
                 with self.assertRaises(HTTPError) as denied:
                     urlopen(base + "/api/frame.png", timeout=2)
                 self.assertEqual(denied.exception.code, 401)
                 with self.assertRaises(HTTPError) as denied:
                     urlopen(base + "/api/status", timeout=2)
                 self.assertEqual(denied.exception.code, 401)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_theme_is_publicly_readable_but_admin_only_writable(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever,
+                                  kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def submit(theme, cookie=None, csrf=None):
+            headers = {"Content-Type": "application/json",
+                       "Origin": f"https://127.0.0.1:{server.server_port}"}
+            if cookie:
+                headers["Cookie"] = cookie
+            if csrf:
+                headers["X-R1-CSRF"] = csrf
+            request = Request(base + "/api/theme", data=json.dumps({"theme": theme}).encode(), headers=headers)
+            try:
+                response = urlopen(request, timeout=2)
+            except HTTPError as error:
+                response = error
+            with response:
+                return response.status
+
+        try:
+            with patch.dict(SESSIONS, {"test": (time.time() + 60, "csrf")}, clear=True), \
+                    patch("r1_web.load_theme", return_value="mocha"), \
+                    patch("r1_web.save_theme") as save:
+                with urlopen(base + "/api/theme", timeout=2) as response:
+                    self.assertEqual(json.loads(response.read())["theme"], "mocha")
+                self.assertEqual(submit("mocha"), 401)
+                self.assertEqual(submit("mocha", "r1session=test"), 403)
+                self.assertEqual(submit("mocha", "r1session=test", "csrf"), 200)
+                save.assert_called_once_with("mocha")
         finally:
             server.shutdown()
             server.server_close()
