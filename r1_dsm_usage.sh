@@ -1,6 +1,6 @@
 #!/bin/sh
 # Forced-command target for the R1 read-only DSM usage key.
-# Emits one SATA slot and used percentage per single-disk data volume.
+# Keep the legacy SATA percentage lines for the physical panel; add capacity.
 set -eu
 
 data_sata() {
@@ -26,7 +26,7 @@ for volume in /volume[0-9]*; do
         /dev/mapper/cachedev_*:[0-9]* ) ;;
         *) continue ;;
     esac
-    case "$percent" in *[!0-9]*|'') continue ;; esac
+    case "$percent:$2:$3:$4" in *[!0-9:]*|'') continue ;; esac
     [ "$percent" -le 100 ] || continue
     cache=${device##*/}
     for block in /sys/block/dm-*; do
@@ -35,7 +35,10 @@ for volume in /volume[0-9]*; do
         slots=$(data_sata "$block")
         [ "$(printf '%s\n' "$slots" | wc -l)" -eq 1 ] || continue
         case "$slots" in
-            sata[0-9]*) printf 'SATA %s %s\n' "${slots#sata}" "$percent" ;;
+            sata[0-9]*)
+                printf 'SATA %s %s\n' "${slots#sata}" "$percent"
+                printf 'CAPACITY %s %s %s %s %s\n' "${slots#sata}" "$percent" "$2" "$3" "$4"
+                ;;
         esac
     done
 done

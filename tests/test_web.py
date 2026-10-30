@@ -66,14 +66,18 @@ class WebTests(unittest.TestCase):
 
         with (patch("r1_web.public_snapshot", return_value={"storage": [], "vms": []}),
               patch("r1_web.panel_repo.Painter", FakePainter),
+              patch("r1_web.paint_svg") as rasterize,
               patch("r1_web.rgb_png", return_value=b"PNG"),
               patch("r1_web.capture_frame", side_effect=AssertionError("physical framebuffer used"))):
             result = collect_public_frames()
-        self.assertEqual(FakePainter.views, ["panel", "fans"])
+        self.assertEqual(FakePainter.views, ["fans"])
+        rasterize.assert_called_once()
         self.assertEqual(result["panel"], b"PNG")
         self.assertEqual(result["fans"], b"PNG")
         self.assertIn(b"<svg", result["panel_svg"])
         self.assertIn(b"<svg", result["fans_svg"])
+        self.assertIn(b"height=\"633\"", result["panel_svg"])
+        self.assertNotIn("虚拟机状态".encode(), result["panel_svg"])
 
     def test_web_views_escape_models_and_keep_fan_ring_semantics(self):
         data = {
@@ -87,6 +91,7 @@ class WebTests(unittest.TestCase):
             "drives": [("BAY 1", 39)], "fan_basis": (65, 39, 4), "rgb": False,
         }
         panel = render_information(data).decode("utf-8")
+        web_panel = render_information(data, web_layout=True).decode("utf-8")
         fans = render_fans(data).decode("utf-8")
         self.assertIn("Model &lt;script&gt;", panel)
         self.assertNotIn("<script>", panel)
@@ -96,6 +101,18 @@ class WebTests(unittest.TestCase):
         data["storage"].append((("2TB", "SSD", "****"), 39))
         self.assertIn("BAY 1 · 2TB SSD", render_information(data).decode("utf-8"))
         self.assertIn("VM 100", panel)
+        self.assertIn("VM 100", web_panel)
+        self.assertIn("运行中", web_panel)
+        self.assertNotIn("虚拟机状态", web_panel)
+        self.assertIn('height="197"', web_panel)
+        self.assertIn('height="633"', web_panel)
+        self.assertIn('>系统</text>', web_panel)
+        self.assertIn('>存储</text>', web_panel)
+        self.assertNotIn('>存储硬盘', web_panel)
+        self.assertIn('cx="94" cy="209" r="58"', web_panel)
+        self.assertIn('x="329" y="251"', web_panel)
+        self.assertIn('x="329" y="269"', web_panel)
+        self.assertIn('font-size="39" font-weight="700" dominant-baseline="middle" text-anchor="end">56', web_panel)
         self.assertNotIn("Synology", panel)
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
@@ -120,7 +137,13 @@ class WebTests(unittest.TestCase):
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "自动" for node in fan_text))
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
-        data["control"] = {"live": True, "desired": "full", "mode": "full"}
+        web_fans = render_fans(data, web_layout=True).decode("utf-8")
+        self.assertIn("智能温控", web_fans)
+        self.assertIn("机身 RGB", web_fans)
+        self.assertNotIn("独立温控服务", web_fans)
+        self.assertNotIn("自动调节", web_fans)
+        data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
+        self.assertIn("全速运行 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -160,6 +183,9 @@ class WebTests(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_theme_is_publicly_readable_but_admin_only_writable(self):
+        source = (Path(__file__).resolve().parents[1] / "r1_web.html").read_text(encoding="utf-8")
+        self.assertIn('<option value="mocha">Catppuccin Mocha</option>', source)
+        self.assertNotIn('<option value="current">', source)
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever,
@@ -187,9 +213,12 @@ class WebTests(unittest.TestCase):
                     patch("r1_web.load_theme", return_value="mocha"), \
                     patch("r1_web.save_theme") as save:
                 with urlopen(base + "/api/theme", timeout=2) as response:
-                    self.assertEqual(json.loads(response.read())["theme"], "mocha")
+                    theme_data = json.loads(response.read())
+                    self.assertEqual(theme_data["theme"], "mocha")
+                    self.assertEqual(theme_data["choices"], ["mocha"])
                 self.assertEqual(submit("mocha"), 401)
                 self.assertEqual(submit("mocha", "r1session=test"), 403)
+                self.assertEqual(submit("current", "r1session=test", "csrf"), 400)
                 self.assertEqual(submit("mocha", "r1session=test", "csrf"), 200)
                 save.assert_called_once_with("mocha")
         finally:

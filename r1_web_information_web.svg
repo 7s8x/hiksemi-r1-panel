@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="376" height="960" viewBox="0 0 376 960">
+  <rect width="376" height="960" fill="#0b121b"/>
+  <g font-family="PingFang SC, Noto Sans CJK SC, Arial, sans-serif">
+    <!-- Device and system identity -->
+    <text x="20" y="35" fill="#edf6f8" font-size="22" font-weight="700">HIKSEMI R1</text>
+    <text x="20" y="61" fill="#8fa6b4" font-size="12">{{PVE_VERSION}}</text>
+    <text x="20" y="81" fill="#75c4dc" font-size="11">{{UPTIME}}</text>
+    <rect x="291" y="13" width="65" height="25" rx="6" fill="#17382f" stroke="#327861" stroke-width="1"/>
+    <circle cx="304" cy="25.5" r="4" fill="#71d4b7"/>
+    <text x="316" y="30" fill="#9ee8ce" font-size="12" font-weight="600">在线</text>
+    <text x="356" y="80" fill="#edf6f8" font-size="37" font-weight="700" text-anchor="end">{{CLOCK}}</text>
+
+    <!-- Web-only CPU card: same height as the fan card, with VM status inside -->
+    <rect x="16" y="99" width="344" height="197" rx="7" fill="#15232e" stroke="#2a4050"/>
+    <text x="32" y="127" fill="#edf6f8" font-size="16" font-weight="700">系统</text>
+    <text x="344" y="126" fill="#9bb1be" font-size="12" text-anchor="end">{{CPU_MODEL}}</text>
+    <circle cx="94" cy="209" r="58" fill="none" stroke="#263845" stroke-width="11"/>
+    <circle cx="94" cy="209" r="58" fill="none" stroke="#74bfff" stroke-width="11" stroke-linecap="round" stroke-dasharray="{{CPU_ARC}} 364" transform="rotate(-90 94 209)"/>
+    <text x="94" y="213" fill="#edf6f8" font-size="32" font-weight="700" text-anchor="middle">{{CPU_USAGE}}</text>
+    <text x="94" y="238" fill="#9bb1be" font-size="12" text-anchor="middle">CPU 占用</text>
+    <text x="171" y="177" fill="#9bb1be" font-size="13" dominant-baseline="middle">温度</text>
+    <text x="329" y="177" fill="#f5ad75" font-size="39" font-weight="700" dominant-baseline="middle" text-anchor="end">{{CPU_TEMP}}<tspan font-size="17">{{CPU_TEMP_UNIT}}</tspan></text>
+    <line x1="171" y1="201" x2="329" y2="201" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="218" fill="#9bb1be" font-size="13" dominant-baseline="middle">内存</text>
+    <text x="329" y="218" fill="#edf6f8" font-size="17" font-weight="700" dominant-baseline="middle" text-anchor="end">{{MEM_USED}}<tspan fill="#9bb1be"> / {{MEM_TOTAL}}</tspan><tspan fill="#9bb1be" font-size="11"> GiB</tspan></text>
+    <line x1="171" y1="235" x2="329" y2="235" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="251" fill="#edf6f8" font-size="12" font-weight="600">{{VM0_NAME}}</text>
+    <text x="329" y="251" fill="{{VM0_COLOR}}" font-size="12" text-anchor="end">{{VM0_STATUS}}</text>
+    <text x="171" y="269" fill="#edf6f8" font-size="12" font-weight="600">{{VM1_NAME}}</text>
+    <text x="329" y="269" fill="{{VM1_COLOR}}" font-size="12" text-anchor="end">{{VM1_STATUS}}</text>
+
+    <!-- Web-only drive card fills the space released by the VM card -->
+    <rect x="16" y="310" width="344" height="633" rx="7" fill="#15232e" stroke="#2a4050"/>
+    <text x="32" y="340" fill="#edf6f8" font-size="16" font-weight="700">存储</text>
+    <text x="344" y="339" fill="#8fa6b4" font-size="11" text-anchor="end">温度 / 占用</text>
+
+    <text x="42" y="375" fill="#edf6f8" font-size="17" font-weight="700">{{D0_TITLE}}</text>
+    <text x="42" y="399" fill="#9ab2c0" font-size="12">{{D0_MODEL}}</text>
+    <text x="332" y="406" fill="#75c4dc" font-size="39" font-weight="700" text-anchor="end">{{D0_TEMP}}<tspan font-size="17">{{D0_UNIT}}</tspan></text>
+    <rect x="42" y="421" width="290" height="6" rx="3" fill="#344b57"/>
+    <rect x="42" y="421" width="{{D0_BAR}}" height="6" rx="3" fill="{{D0_BAR_COLOR}}"/>
+    <text x="42" y="446" fill="#9ab2c0" font-size="12" font-weight="700">{{D0_USED}}</text>
+    <text x="332" y="446" fill="#9ab2c0" font-size="12" text-anchor="end">{{D0_TOTAL}}</text>
+    <line x1="42" y1="462" x2="332" y2="462" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+
+    <text x="42" y="493" fill="#edf6f8" font-size="17" font-weight="700">{{D1_TITLE}}</text>
+    <text x="42" y="517" fill="#9ab2c0" font-size="12">{{D1_MODEL}}</text>
+    <text x="332" y="524" fill="#75c4dc" font-size="39" font-weight="700" text-anchor="end">{{D1_TEMP}}<tspan font-size="17">{{D1_UNIT}}</tspan></text>
+    <rect x="42" y="539" width="290" height="6" rx="3" fill="#344b57"/>
+    <rect x="42" y="539" width="{{D1_BAR}}" height="6" rx="3" fill="{{D1_BAR_COLOR}}"/>
+    <text x="42" y="564" fill="#9ab2c0" font-size="12" font-weight="700">{{D1_USED}}</text>
+    <text x="332" y="564" fill="#9ab2c0" font-size="12" text-anchor="end">{{D1_TOTAL}}</text>
+    <line x1="42" y1="580" x2="332" y2="580" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+
+    <text x="42" y="611" fill="#edf6f8" font-size="17" font-weight="700">{{D2_TITLE}}</text>
+    <text x="42" y="635" fill="#9ab2c0" font-size="12">{{D2_MODEL}}</text>
+    <text x="332" y="642" fill="#75c4dc" font-size="39" font-weight="700" text-anchor="end">{{D2_TEMP}}<tspan font-size="17">{{D2_UNIT}}</tspan></text>
+    <rect x="42" y="657" width="290" height="6" rx="3" fill="#344b57"/>
+    <rect x="42" y="657" width="{{D2_BAR}}" height="6" rx="3" fill="{{D2_BAR_COLOR}}"/>
+    <text x="42" y="682" fill="#9ab2c0" font-size="12" font-weight="700">{{D2_USED}}</text>
+    <text x="332" y="682" fill="#9ab2c0" font-size="12" text-anchor="end">{{D2_TOTAL}}</text>
+    <line x1="42" y1="698" x2="332" y2="698" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+
+    <text x="42" y="729" fill="#edf6f8" font-size="17" font-weight="700">{{D3_TITLE}}</text>
+    <text x="42" y="753" fill="#9ab2c0" font-size="12">{{D3_MODEL}}</text>
+    <text x="332" y="760" fill="#75c4dc" font-size="39" font-weight="700" text-anchor="end">{{D3_TEMP}}<tspan font-size="17">{{D3_UNIT}}</tspan></text>
+    <rect x="42" y="775" width="290" height="6" rx="3" fill="#344b57"/>
+    <rect x="42" y="775" width="{{D3_BAR}}" height="6" rx="3" fill="{{D3_BAR_COLOR}}"/>
+    <text x="42" y="800" fill="#9ab2c0" font-size="12" font-weight="700">{{D3_USED}}</text>
+    <text x="332" y="800" fill="#9ab2c0" font-size="12" text-anchor="end">{{D3_TOTAL}}</text>
+    <line x1="42" y1="816" x2="332" y2="816" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+
+    <text x="42" y="847" fill="#edf6f8" font-size="17" font-weight="700">{{D4_TITLE}}</text>
+    <text x="42" y="871" fill="#9ab2c0" font-size="12">{{D4_MODEL}}</text>
+    <text x="332" y="878" fill="#75c4dc" font-size="39" font-weight="700" text-anchor="end">{{D4_TEMP}}<tspan font-size="17">{{D4_UNIT}}</tspan></text>
+    <rect x="42" y="893" width="290" height="6" rx="3" fill="#344b57"/>
+    <rect x="42" y="893" width="{{D4_BAR}}" height="6" rx="3" fill="{{D4_BAR_COLOR}}"/>
+    <text x="42" y="918" fill="#9ab2c0" font-size="12" font-weight="700">{{D4_USED}}</text>
+    <text x="332" y="918" fill="#9ab2c0" font-size="12" text-anchor="end">{{D4_TOTAL}}</text>
+  </g>
+</svg>

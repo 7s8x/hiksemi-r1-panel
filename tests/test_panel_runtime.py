@@ -15,6 +15,7 @@ import r1_panel_repository  # noqa: E402
 
 
 class PanelRuntimeTests(unittest.TestCase):
+
     def test_slow_collection_does_not_block_snapshot_read(self):
         gate = threading.Event()
         def collect():

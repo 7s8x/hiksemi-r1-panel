@@ -36,9 +36,12 @@ class StorageUsageTests(unittest.TestCase):
             self.assertIsNone(usage._nvme_usage())
 
     def test_guest_rejects_invalid_or_unrelated_output(self):
-        config = ("192.0.2.4", "fs", 100, Path("/key"), Path("/known"))
+        config = ("192.0.2.4", "fs", 100, Path("/key"), Path("/known"), 233)
         with patch.object(usage, "_run", return_value="SATA 3 87\nSATA 4 4\nSATA 5 120\nother 2 60\n"):
             self.assertEqual(usage._guest_usage(config), {3: 87, 4: 4})
+        command = usage._guest_ssh_command(config)
+        self.assertEqual(command[command.index("-p") + 1], "233")
+        self.assertIn("HostKeyAlias=192.0.2.4", command)
 
     def test_bay_map_follows_current_vm_slot_not_disk_name_or_order(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -102,14 +102,14 @@ def _free_amount(size_bytes: int) -> str:
     return f"{size_bytes / 1_000_000_000_000:.2f}TB" if size_bytes >= 1_000_000_000_000 else f"{size_bytes / 1_000_000_000:.0f}GB"
 
 
-def render_information(data: dict) -> bytes:
+def render_information(data: dict, *, web_layout: bool = False) -> bytes:
     values = _shared(data)
     usage = _number(data.get("cpu_usage"))
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
     total = _number(data.get("mem_total"), 0, 10000)
     used = _number(data.get("mem_used"), 0, 10000)
     values.update(CPU_MODEL=data.get("cpu_model") or "CPU",
-                  CPU_ARC=round(314 * usage / 100) if usage is not None else 0,
+                  CPU_ARC=round((364 if web_layout else 314) * usage / 100) if usage is not None else 0,
                   CPU_USAGE=f"{round(usage)}%" if usage is not None else "--",
                   CPU_TEMP=cpu_temp, CPU_TEMP_UNIT=cpu_unit,
                   MEM_USED=f"{used:.1f}" if used is not None else "--",
@@ -160,10 +160,12 @@ def render_information(data: dict) -> bytes:
         values[f"VM{index}_NAME"] = str(vmid)[:16]
         values[f"VM{index}_ID"] = ""
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
-    return theme_svg(_template("r1_web_information.svg", values))
+        values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
+    template = "r1_web_information_web.svg" if web_layout else "r1_web_information.svg"
+    return theme_svg(_template(template, values))
 
 
-def render_fans(data: dict) -> bytes:
+def render_fans(data: dict, *, web_layout: bool = False) -> bytes:
     values = _shared(data)
     fans = data.get("fans") or {}
     control = data.get("control") or {}
@@ -234,4 +236,9 @@ def render_fans(data: dict) -> bytes:
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
-    return theme_svg(_template("r1_web_fans.svg", values))
+    if web_layout and full_active:
+        remaining = control.get("remaining")
+        values["CONTROL_STATUS"] = (f"全速运行 · 剩余 {remaining} 秒"
+                                    if remaining is not None else "全速运行")
+    template = "r1_web_fans_web.svg" if web_layout else "r1_web_fans.svg"
+    return theme_svg(_template(template, values))

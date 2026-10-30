@@ -32,9 +32,13 @@ from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
 from r1_web_views import drive_models, render_fans, render_information, system_identity
+from r1_svg_painter import paint_svg
 from r1_web_capacity import storage_capacity
 from r1_fan_curve import temperatures as fan_temperatures
-from r1_theme import CHOICES as THEMES, load_theme, save_theme
+from r1_theme import load_theme, save_theme
+
+
+SELECTABLE_THEMES = ("mocha",)
 
 
 STATE_DIR = Path("/var/lib/r1-web")
@@ -227,17 +231,19 @@ def public_snapshot() -> dict:
 def collect_public_frames() -> dict:
     """Render two independent images in memory; never touch the physical display."""
     data = public_snapshot()
-    frames = {}
+    frames = {"panel_svg": render_information(data, web_layout=True),
+              "fans_svg": render_fans(data, web_layout=True)}
     for view in ("panel", "fans"):
         painter = panel_repo.Painter()
         try:
-            painter.draw(data, view=view)
+            if view == "panel":
+                paint_svg(painter, frames["panel_svg"])
+            else:
+                painter.draw(data, view=view)
             pixels, stride = painter.pixels()
             frames[view] = rgb_png(pixels, stride)
         finally:
             painter.close()
-    frames["panel_svg"] = render_information(data)
-    frames["fans_svg"] = render_fans(data)
     frames["updated"] = time.time()
     return frames
 
@@ -317,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, FAVICON.read_bytes(), "image/svg+xml")
             return
         if path == "/api/theme":
-            self._json(200, {"theme": load_theme(), "choices": THEMES})
+            self._json(200, {"theme": load_theme(), "choices": SELECTABLE_THEMES})
             return
         if path in ("/public/panel.png", "/public/fans.png",
                     "/public/panel.svg", "/public/fans.svg"):
@@ -426,6 +432,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/theme":
                 if not isinstance(body, dict) or set(body) != {"theme"}:
                     raise ValueError("invalid theme request")
+                if body["theme"] not in SELECTABLE_THEMES:
+                    raise ValueError("theme is not selectable")
                 with THEME_LOCK:
                     save_theme(body["theme"])
                 self._json(200, {"ok": True, "theme": load_theme()})

@@ -334,7 +334,7 @@ class Painter:
         self.text(right - extents[4], y, value, size, rgb, bold)
 
     def draw(self, data, touch_mode=False, brightness=None, view="panel"):
-        svg = render_fans(data) if view == "fans" else render_information(data)
+        svg = render_fans(data, web_layout=True) if view == "fans" else render_information(data, web_layout=True)
         paint_svg(self, svg)
         return
         bg, panel, muted, fg, cyan = (9, 20, 29), (19, 40, 52), (145, 169, 180), (231, 242, 246), (103, 185, 208)

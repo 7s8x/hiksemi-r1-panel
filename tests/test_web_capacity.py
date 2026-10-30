@@ -45,7 +45,7 @@ class WebCapacityTests(unittest.TestCase):
             self.assertEqual(capacity._nvme_capacity(), (500, 9460, 5))
 
     def test_guest_accepts_only_valid_numeric_capacity(self):
-        config = ("192.0.2.4", "fs", 100, Path("/key"), Path("/known"))
+        config = ("192.0.2.4", "fs", 100, Path("/key"), Path("/known"), 233)
         output = ("SATA 4 4\nCAPACITY 4 4 1000 40 960\n"
                   "CAPACITY 5 97 1000 970 30\n"
                   "CAPACITY 6 80 1000 1200 0\n"

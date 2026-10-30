@@ -78,28 +78,22 @@ def _config():
         host = str(ipaddress.ip_address(config["host"]))
         user = config["user"]
         vmid = config["vmid"]
+        port = config.get("port", 22)
         identity = Path(config["identity_file"])
         known_hosts = Path(config["known_hosts_file"])
         if (not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", user) or
                 not isinstance(vmid, int) or not 100 <= vmid <= 999999 or
+                not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535 or
                 not identity.is_absolute() or not known_hosts.is_absolute() or
                 not identity.is_file() or not known_hosts.is_file()):
             return None
-        return host, user, vmid, identity, known_hosts
+        return host, user, vmid, identity, known_hosts, port
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
 def _guest_usage(config):
-    host, user, _, identity, known_hosts = config
-    output = _run([
-        "ssh", "-i", str(identity), "-o", "IdentitiesOnly=yes",
-        "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-        "-o", f"UserKnownHostsFile={known_hosts}",
-        "-o", "ConnectTimeout=3", "-o", "UpdateHostKeys=no",
-        "-o", "ClearAllForwardings=yes", "-o", "PasswordAuthentication=no",
-        "-T", f"{user}@{host}", "r1-usage",
-    ], 6)
+    output = _run(_guest_ssh_command(config), 6)
     result = {}
     for line in output.splitlines():
         match = re.fullmatch(r"SATA\s+([0-9]+)\s+([0-9]{1,3})", line.strip())
@@ -109,6 +103,21 @@ def _guest_usage(config):
         if 1 <= slot <= 32 and 0 <= percent <= 100:
             result[slot] = percent
     return result
+
+
+def _guest_ssh_command(config):
+    host, user, _, identity, known_hosts, port = config
+    args = [
+        "ssh", "-i", str(identity), "-o", "IdentitiesOnly=yes",
+        "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+        "-o", f"UserKnownHostsFile={known_hosts}",
+        "-o", "ConnectTimeout=3", "-o", "UpdateHostKeys=no",
+        "-o", "ClearAllForwardings=yes", "-o", "PasswordAuthentication=no",
+    ]
+    if port != 22:
+        # Keep matching the already pinned hostname when SSH moves ports.
+        args += ["-p", str(port), "-o", f"HostKeyAlias={host}"]
+    return args + ["-T", f"{user}@{host}", "r1-usage"]
 
 
 def _host_sata(config):
