@@ -2,8 +2,6 @@
 
 在海康 R1（型号 `HS-AFS-R1`）上运行 Proxmox VE 时，把这台小主机的**物理前屏、风扇、RGB 灯**和一套 **HTTPS 管理页面**接管起来，让一台原本只能当 NUC 用的机器，变成能看见状态、能调转速、能远程查看的 PVE 节点。
 
-当前版本 **v1.3.1** ｜ 版本历史见 [Releases](https://github.com/7s8x/hiksemi-r1-panel/releases)
-
 ---
 
 ## 它能做什么
