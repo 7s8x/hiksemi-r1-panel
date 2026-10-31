@@ -36,9 +36,9 @@ openssl x509 -in /var/lib/r1-web/server.crt -noout -fingerprint -sha256
 | `r1_web_information_web.svg` | 信息页 |
 | `r1_web_fans_web.svg` | 风扇页 |
 
-`PanelRenderer.draw()` 与 Web 端都固定以 `web_layout=True` 调用 `render_information()` / `render_fans()`，所以两处画面一致。
+`PanelRenderer.draw()` 与 Web 端都调用 `render_information()` / `render_fans()`，两个函数固定加载上面两份模板，所以两处画面一致。`web_layout` 关键字参数为兼容保留，现在传与不传结果相同。
 
-`r1_web_information.svg` 和 `r1_web_fans.svg` 是早期布局——虚拟机是底部独立的「虚拟机状态」卡片，第一张卡标题为「处理器」。生产路径已经不再使用它们，只有 `tests/test_web.py` 里不带参数的默认调用仍会渲染，属于待清理的历史遗留；删除时需同步调整那些测试。
+早期另有一套 `r1_web_information.svg` / `r1_web_fans.svg`（虚拟机是底部独立的「虚拟机状态」卡片、第一张卡标题为「处理器」），生产路径早已不用，已从仓库移除。旧版本的校验清单 `SHA256SUMS-v1.3.1.txt` 里仍会提到这两个文件名，那是 v1.3.1 的历史快照。
 
 ## 未登录能看什么
 
