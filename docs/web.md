@@ -27,6 +27,19 @@ openssl x509 -in /var/lib/r1-web/server.crt -noout -fingerprint -sha256
 - 初始管理员密码只写在 `/var/lib/r1-web/initial-password`（root 可读），`init` 时不会打印到终端
 - 登录后 8 小时会话；改密成功后所有会话立即失效，需重新登录
 
+## 渲染模板
+
+**前屏和 Web 页共用同一套模板**，即文件名带 `_web` 的两份：
+
+| 模板 | 页面 |
+| --- | --- |
+| `r1_web_information_web.svg` | 信息页 |
+| `r1_web_fans_web.svg` | 风扇页 |
+
+`PanelRenderer.draw()` 与 Web 端都固定以 `web_layout=True` 调用 `render_information()` / `render_fans()`，所以两处画面一致。
+
+`r1_web_information.svg` 和 `r1_web_fans.svg` 是早期布局——虚拟机是底部独立的「虚拟机状态」卡片，第一张卡标题为「处理器」。生产路径已经不再使用它们，只有 `tests/test_web.py` 里不带参数的默认调用仍会渲染，属于待清理的历史遗留；删除时需同步调整那些测试。
+
 ## 未登录能看什么
 
 `/public/panel.png` 和 `/public/fans.png` 两张只读图，约 15 秒刷新一次。
