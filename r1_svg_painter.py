@@ -1,7 +1,7 @@
 """Render the two fixed Web SVG layouts on the R1 Cairo framebuffer surface.
 
-This handles only the SVG elements used by r1_web_information.svg and
-r1_web_fans.svg. It does not open the framebuffer or control any device.
+This handles only the SVG elements used by r1_web_information_web.svg and
+r1_web_fans_web.svg. It does not open the framebuffer or control any device.
 """
 
 from __future__ import annotations
