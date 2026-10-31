@@ -56,8 +56,6 @@ python3 -m venv .venv
 
 `load_it87_for_curve.sh` 会加载一个**为特定内核版本构建**的 `it87.ko`，并用 SHA-256 与 `vermagic` 双重校验。
 
-> ⚠️ 脚本里写死了驱动路径 `/root/r1-it87-test-bd7a566c/it87.ko` 和哈希值，这是作者本机的构建产物。**换机器必须自己重新构建驱动并改掉这两个常量**，不能直接沿用。
-
 内核升级后需要重新构建，不能假定旧模块可用。
 
 ### 3. 安装 systemd 服务
@@ -84,8 +82,6 @@ systemctl enable r1-panel.service r1-fan-curve.service r1-web.service
 
 - 生成管理员密码摘要，并把**初始密码**写入 `initial-password`（不会打印到终端，需 `cat` 查看）
 - 用 `openssl` 生成 P-256 自签证书，并打印 SHA-256 指纹
-
-**默认监听地址是 `192.168.50.3:8443`**，这是作者的家庭网地址。你需要改 `r1-web.service` 的 `ExecStart`，加上 `--host <你的IP>`，否则服务起不来。
 
 ### 5. 启动与验证
 
