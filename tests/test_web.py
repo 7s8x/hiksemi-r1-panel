@@ -215,7 +215,7 @@ class WebTests(unittest.TestCase):
                 with urlopen(base + "/api/theme", timeout=2) as response:
                     theme_data = json.loads(response.read())
                     self.assertEqual(theme_data["theme"], "mocha")
-                    self.assertEqual(theme_data["choices"], ["mocha"])
+                    self.assertEqual(theme_data["choices"], ["mocha", "latte"])
                 self.assertEqual(submit("mocha"), 401)
                 self.assertEqual(submit("mocha", "r1session=test"), 403)
                 self.assertEqual(submit("current", "r1session=test", "csrf"), 400)

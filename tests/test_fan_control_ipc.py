@@ -55,6 +55,17 @@ class FanControlIpcTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 request_mode("off", Path(temporary) / "mode")
 
+    def test_independent_channel_status_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            mode = path / "mode"
+            status_path = path / "status"
+            request_mode("auto", mode)
+            publish_status("auto", 200, status_path, pwm2=120, pwm3=200)
+            result = control_status(mode, status_path)
+            self.assertTrue(result["live"])
+            self.assertEqual((result["pwm2"], result["pwm3"]), (120, 200))
+
 
 if __name__ == "__main__":
     unittest.main()

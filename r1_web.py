@@ -38,7 +38,7 @@ from r1_fan_curve import temperatures as fan_temperatures
 from r1_theme import load_theme, save_theme
 
 
-SELECTABLE_THEMES = ("mocha",)
+SELECTABLE_THEMES = ("mocha", "latte")
 
 
 STATE_DIR = Path("/var/lib/r1-web")

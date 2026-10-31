@@ -88,12 +88,12 @@ def _rect(lib, ctx, element):
         return
     lib.cairo_save(ctx)
     _round_path(lib, ctx, x, y, width, height, float(element.get("rx", 0)))
-    if _color(lib, ctx, element.get("fill")):
+    if _color(lib, ctx, element.get("fill"), element.get("fill-opacity", 1)):
         if element.get("stroke"):
             lib.cairo_fill_preserve(ctx)
         else:
             lib.cairo_fill(ctx)
-    if _color(lib, ctx, element.get("stroke")):
+    if _color(lib, ctx, element.get("stroke"), element.get("stroke-opacity", 1)):
         lib.cairo_set_line_width(ctx, float(element.get("stroke-width", 1)))
         lib.cairo_stroke(ctx)
     lib.cairo_restore(ctx)
@@ -106,12 +106,12 @@ def _circle(lib, ctx, element):
     lib.cairo_save(ctx)
     lib.cairo_new_path(ctx)
     lib.cairo_arc(ctx, x, y, radius, 0, 2 * math.pi)
-    if _color(lib, ctx, element.get("fill")):
+    if _color(lib, ctx, element.get("fill"), element.get("fill-opacity", 1)):
         if element.get("stroke"):
             lib.cairo_fill_preserve(ctx)
         else:
             lib.cairo_fill(ctx)
-    if _color(lib, ctx, element.get("stroke")):
+    if _color(lib, ctx, element.get("stroke"), element.get("stroke-opacity", 1)):
         dash = element.get("stroke-dasharray")
         if dash:
             length = float(dash.split()[0])

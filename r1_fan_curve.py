@@ -1,7 +1,6 @@
-"""Temporary, increase-only R1 fan curve trial. Not an autostart service.
+"""Independent R1 fan policy: FAN2 storage with CPU assist, FAN3 CPU.
 
-Both verified channels follow the hotter of CPU and drive curves until their
-physical roles are known. A missing sensor or zero RPM requests full speed.
+Missing sensors or zero RPM force both channels to full speed.
 """
 
 from __future__ import annotations
@@ -12,13 +11,14 @@ from pathlib import Path
 import signal
 import time
 
-from r1_hardware import FanCurve
+from r1_hardware import FanCurve, FanPoint
 from r1_fan_control_ipc import publish_status, requested_mode
 from r1_fan_config import CONFIG_FILE, DEFAULT, curves, digest, load
 
 BASELINE_PWM = 120
 EXPECTED_DRIVES = 4
 CPU_CURVE, DRIVE_CURVE = curves(DEFAULT)
+CPU_ASSIST = FanCurve(tuple(FanPoint(t, p) for t, p in ((80, 120), (85, 160), (90, 220), (95, 255))))
 STOP = False
 
 
@@ -89,15 +89,24 @@ def sample(chip: Path, root: Path = Path("/sys/class/hwmon")) -> Reading:
     )
 
 
-def target_pwm(reading: Reading, expected_drives: int,
-               active_curves: tuple[FanCurve, FanCurve] | None = None) -> int:
+def target_pwms(reading: Reading, expected_drives: int,
+                active_curves: tuple[FanCurve, FanCurve] | None = None) -> tuple[int, int]:
+    """Return (FAN2 chassis, FAN3 CPU), retaining global fail-high protection."""
     if (reading.cpu_c is None or reading.drive_c is None
             or reading.drive_count < expected_drives
             or reading.fan2 <= 0 or reading.fan3 <= 0):
-        return 255
+        return 255, 255
     cpu_curve, drive_curve = active_curves or (CPU_CURVE, DRIVE_CURVE)
-    return max(BASELINE_PWM, cpu_curve.pwm_at(reading.cpu_c),
-               drive_curve.pwm_at(reading.drive_c))
+    chassis = max(BASELINE_PWM, drive_curve.pwm_at(reading.drive_c),
+                  CPU_ASSIST.pwm_at(reading.cpu_c))
+    cpu = max(BASELINE_PWM, cpu_curve.pwm_at(reading.cpu_c))
+    return chassis, cpu
+
+
+def target_pwm(reading: Reading, expected_drives: int,
+               active_curves: tuple[FanCurve, FanCurve] | None = None) -> int:
+    """Compatibility summary; actual writes use independent channel targets."""
+    return max(target_pwms(reading, expected_drives, active_curves))
 
 
 def next_pwm(current: int, requested: int) -> int:
@@ -114,10 +123,10 @@ def controllable_mode(mode: int, pwm: int) -> bool:
     return mode == 1 or (mode == 0 and pwm == 255)
 
 
-def set_both(chip: Path, value: int) -> None:
-    if not BASELINE_PWM <= value <= 255:
+def set_channels(chip: Path, pwm2: int, pwm3: int) -> None:
+    if not all(BASELINE_PWM <= value <= 255 for value in (pwm2, pwm3)):
         raise ValueError("PWM outside increase-only trial range")
-    for channel in (2, 3):
+    for channel, value in ((2, pwm2), (3, pwm3)):
         mode = read_int(chip / f"pwm{channel}_enable")
         node = chip / f"pwm{channel}"
         current = read_int(node)
@@ -131,6 +140,10 @@ def set_both(chip: Path, value: int) -> None:
             raise RuntimeError(f"pwm{channel} readback mismatch")
         if value < 255 and read_int(chip / f"pwm{channel}_enable") != 1:
             raise RuntimeError(f"pwm{channel} did not return to manual mode")
+
+
+def set_both(chip: Path, value: int) -> None:
+    set_channels(chip, value, value)
 
 
 def restore(chip: Path) -> None:
@@ -155,7 +168,7 @@ def run(seconds: int, chip: Path) -> None:
             and controllable_mode(initial.mode3, initial.pwm3)):
         raise RuntimeError("PWM mode differs from verified manual/full-speed modes")
     deadline = None if seconds == 0 else time.monotonic() + seconds
-    applied = max(initial.pwm2, initial.pwm3)
+    applied = (initial.pwm2, initial.pwm3)
     previous_mode = None
     active_curves = (CPU_CURVE, DRIVE_CURVE)
     curve_id = digest(DEFAULT)
@@ -181,12 +194,12 @@ def run(seconds: int, chip: Path) -> None:
                     and controllable_mode(reading.mode3, reading.pwm3)):
                 raise RuntimeError("PWM mode changed during trial")
             mode = requested_mode(clear_expired=True)
-            target = 255 if mode == "full" else target_pwm(reading, EXPECTED_DRIVES, active_curves)
-            applied = target if previous_mode == "full" and mode == "auto" else next_pwm(applied, target)
-            set_both(chip, applied)
+            target = (255, 255) if mode == "full" else target_pwms(reading, EXPECTED_DRIVES, active_curves)
+            applied = tuple(next_pwm(current, requested) for current, requested in zip(applied, target))
+            set_channels(chip, *applied)
             previous_mode = mode
             try:
-                publish_status(mode, applied, curve_id=curve_id)
+                publish_status(mode, max(applied), curve_id=curve_id, pwm2=applied[0], pwm3=applied[1])
             except OSError as error:
                 print(f"status_write_error={error}", flush=True)
             print(f"cpu={reading.cpu_c} drive={reading.drive_c} "
@@ -213,7 +226,7 @@ def main() -> None:
     chip = single_hwmon("it8613")
     if args.action == "check":
         reading = sample(chip)
-        print(f"sample={reading} target={target_pwm(reading, EXPECTED_DRIVES)}")
+        print(f"sample={reading} targets={target_pwms(reading, EXPECTED_DRIVES)}")
     elif args.action == "restore":
         restore(chip)
     else:

@@ -36,6 +36,24 @@ class ThemeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             theme_svg(source + b'<!-- #123456 -->', "mocha")
 
+    def test_latte_matches_approved_preview_and_preserves_geometry(self):
+        import xml.etree.ElementTree as ET
+        source = b'<svg width="376" height="960"><rect x="3" y="4" width="65" height="25" fill="#17382f" stroke="#327861"/><circle cx="70" cy="90" r="58" stroke="#74bfff"/><text fill="#75c4dc">43</text></svg>'
+        root = ET.fromstring(theme_svg(source, "latte"))
+        self.assertEqual(root.attrib, {"width": "376", "height": "960"})
+        badge, ring, number = list(root)
+        self.assertEqual(badge.get("x"), "3")
+        self.assertEqual(badge.get("fill"), "#7287fd")
+        self.assertEqual(badge.get("fill-opacity"), "0.10")
+        self.assertEqual(badge.get("stroke"), "#8839ef")
+        self.assertEqual(ring.get("stroke"), "#ea76cb")
+        self.assertEqual(ring.get("r"), "58")
+        self.assertEqual(number.get("fill"), "#8839ef")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "theme.json"
+            save_theme("latte", path)
+            self.assertEqual(load_theme(path), "latte")
+
 
 if __name__ == "__main__":
     unittest.main()

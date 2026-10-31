@@ -69,10 +69,15 @@ def request_mode(mode: str, path: Path = MODE_FILE) -> None:
 
 
 def publish_status(mode: str, pwm: int, path: Path = STATUS_FILE,
-                   curve_id: str | None = None) -> None:
+                   curve_id: str | None = None,
+                   pwm2: int | None = None, pwm3: int | None = None) -> None:
     if mode not in MODES or not 120 <= pwm <= 255:
         raise ValueError("invalid fan status")
     record = {"mode": mode, "pwm": pwm, "updated": time.time()}
+    if pwm2 is not None or pwm3 is not None:
+        if not all(type(value) is int and 120 <= value <= 255 for value in (pwm2, pwm3)):
+            raise ValueError("invalid per-channel fan status")
+        record.update(pwm2=pwm2, pwm3=pwm3)
     if curve_id is not None:
         record["curve_id"] = curve_id
     _replace_text(path, json.dumps(record, separators=(",", ":")))
@@ -97,6 +102,10 @@ def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
                 and 0 <= time.time() - updated <= max_age):
             result.update(mode=mode, pwm=pwm, live=True,
                           curve_id=status.get("curve_id"))
+            for channel in (2, 3):
+                value = status.get(f"pwm{channel}", pwm)
+                if type(value) is int and 120 <= value <= 255:
+                    result[f"pwm{channel}"] = value
     except (OSError, ValueError, KeyError, TypeError, UnicodeError):
         pass
     return result

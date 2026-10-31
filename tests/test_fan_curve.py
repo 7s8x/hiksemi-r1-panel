@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from r1_fan_curve import Reading, controllable_mode, next_pwm, restore, run, target_pwm  # noqa: E402
+from r1_fan_curve import Reading, controllable_mode, next_pwm, restore, run, target_pwm, target_pwms  # noqa: E402
 
 
 def reading(cpu=62, drive=40, drives=4, fan2=995, fan3=2860):
@@ -24,10 +24,36 @@ class FanCurveTests(unittest.TestCase):
         self.assertEqual(target_pwm(reading(drive=50), 4), 180)
         self.assertEqual(target_pwm(reading(cpu=95), 4), 255)
 
+    def test_independent_curves_and_cpu_assist(self):
+        self.assertEqual(target_pwms(reading(cpu=70), 4), (120, 140))
+        self.assertEqual(target_pwms(reading(cpu=62, drive=50), 4), (180, 120))
+        self.assertEqual(target_pwms(reading(cpu=80), 4), (120, 180))
+        self.assertEqual(target_pwms(reading(cpu=85), 4), (160, 200))
+        self.assertEqual(target_pwms(reading(cpu=90), 4), (220, 220))
+        self.assertEqual(target_pwms(reading(cpu=95), 4), (255, 255))
+        self.assertEqual(target_pwms(reading(cpu=None), 4), (255, 255))
+        self.assertEqual(target_pwms(reading(fan2=0), 4), (255, 255))
+        self.assertEqual(target_pwms(reading(drives=3), 4), (255, 255))
+
     def test_missing_sensor_or_zero_rpm_fails_high(self):
         self.assertEqual(target_pwm(reading(cpu=None), 4), 255)
         self.assertEqual(target_pwm(reading(drives=3), 4), 255)
         self.assertEqual(target_pwm(reading(fan3=0), 4), 255)
+
+    def test_channel_outputs_and_driver_full_speed_readback(self):
+        from tempfile import TemporaryDirectory
+        from r1_fan_curve import set_channels
+        with TemporaryDirectory() as directory:
+            chip = Path(directory)
+            for channel in (2, 3):
+                (chip / f"pwm{channel}").write_text("255")
+                (chip / f"pwm{channel}_enable").write_text("0")
+            set_channels(chip, 120, 200)
+            self.assertEqual((chip / "pwm2").read_text().strip(), "120")
+            self.assertEqual((chip / "pwm3").read_text().strip(), "200")
+            self.assertEqual((chip / "pwm2_enable").read_text().strip(), "1")
+            with self.assertRaises(ValueError):
+                set_channels(chip, 119, 255)
 
     def test_increase_immediately_decrease_slowly(self):
         self.assertEqual(next_pwm(120, 180), 180)
@@ -64,7 +90,7 @@ class FanCurveTests(unittest.TestCase):
         write.assert_called_once_with(Path("/unused"), 255)
 
     @patch("r1_fan_curve.restore")
-    @patch("r1_fan_curve.set_both")
+    @patch("r1_fan_curve.set_channels")
     @patch("r1_fan_curve.time.monotonic", side_effect=(0, 0, 1, 1))
     @patch("r1_fan_curve.sample")
     def test_restart_from_above_baseline_gradually_returns_to_curve(
@@ -72,10 +98,10 @@ class FanCurveTests(unittest.TestCase):
         hot_start = replace(reading(), pwm2=124, pwm3=124)
         sample.side_effect = (hot_start, hot_start)
         run(1, Path("/unused"))
-        write.assert_called_once_with(Path("/unused"), 120)
+        write.assert_called_once_with(Path("/unused"), 120, 120)
 
     @patch("r1_fan_curve.restore")
-    @patch("r1_fan_curve.set_both")
+    @patch("r1_fan_curve.set_channels")
     @patch("r1_fan_curve.time.monotonic", side_effect=(0, 0, 1, 1))
     @patch("r1_fan_curve.sample")
     def test_missing_drive_at_start_requests_full_speed(
@@ -83,19 +109,19 @@ class FanCurveTests(unittest.TestCase):
         missing_drive = reading(drives=3)
         sample.side_effect = (missing_drive, missing_drive)
         run(1, Path("/unused"))
-        write.assert_called_once_with(Path("/unused"), 255)
+        write.assert_called_once_with(Path("/unused"), 255, 255)
 
     @patch("r1_fan_curve.restore")
     @patch("r1_fan_curve.publish_status")
     @patch("r1_fan_curve.requested_mode", return_value="full")
-    @patch("r1_fan_curve.set_both")
+    @patch("r1_fan_curve.set_channels")
     @patch("r1_fan_curve.time.monotonic", side_effect=(0, 0, 1, 1))
     @patch("r1_fan_curve.sample", return_value=reading())
     def test_full_speed_request_overrides_curve(
             self, _sample, _clock, write, _mode, status, _restore):
         run(1, Path("/unused"))
-        write.assert_called_once_with(Path("/unused"), 255)
-        status.assert_called_once_with("full", 255, curve_id=__import__("r1_fan_config").digest(__import__("r1_fan_config").DEFAULT))
+        write.assert_called_once_with(Path("/unused"), 255, 255)
+        status.assert_called_once_with("full", 255, pwm2=255, pwm3=255, curve_id=__import__("r1_fan_config").digest(__import__("r1_fan_config").DEFAULT))
 
 
 if __name__ == "__main__":
