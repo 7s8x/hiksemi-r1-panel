@@ -1,5 +1,29 @@
+# 本机配置与凭据 —— README 明确要求不得提交
 drives.json
+storage-usage.json
+*.local.json
+known_hosts*
+id_rsa*
+id_ed25519*
+*.pem
+*.key
+*.crt
+*.p12
+
+# 现场备份与编辑器临时文件
+*.bak
+*.bak-*
+*.orig
+*.rej
+*.swp
+*~
+
+# Python
 *.pyc
 __pycache__/
-preview*.png
 .venv/
+venv/
+.pytest_cache/
+
+# 预览产物
+preview*.png

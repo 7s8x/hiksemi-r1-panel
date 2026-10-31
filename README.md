@@ -18,7 +18,7 @@ Web 可选主题仅保留 Catppuccin Mocha，旧配色仅作为内部兼容回�
 
 ## 1.0.0 历史基线
 
-本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。1.0.0 对应 2026-10-09 现场验收并已在 R1 运行的版本；旧三状态屏幕仍可从 `stable-2026-10-03-swipe-cache` 恢复。版本号只表示当前功能基线，不保证整机重启和所有长期显示故障已得到验证。
+本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。1.0.0 对应 2026-10-09 现场验收并已在 R1 运行的版本；旧三状态屏幕可按 commit `ea8662b` 从 main 历史检出（`git show ea8662b`）。版本号只表示当前功能基线，不保证整机重启和所有长期显示故障已得到验证。
 
 ## 当前功能与证据（2026-10-09）
 
@@ -51,6 +51,6 @@ Web 可选主题仅保留 Catppuccin Mocha，旧配色仅作为内部兼容回�
 
 本项目没有把 R1 Toolbox 的 fnOS 包安装到 PVE，也没有复制其专有程序或强制 `force_id=0x8628`。本机识别到的芯片是 IT8613E；第三方 `it87` 驱动使用固定源码版本构建和哈希校验，二进制不在仓库内。内核升级后必须重新验证/构建，不能假定可直接复用。
 
-只停止前屏：`systemctl stop r1-panel.service`，确认控制台和背光恢复；这不会停止温控。当前前屏为 enabled，若不希望下一次开机启动，须另行禁用服务。恢复上一正式顺序时，应先核对 R1 上的 `r1_panel_repository.py.bak-20261009-order-trial` 与 SHA-256 `196e35304101c0b7fb9d4716b13aa2b67ffdc8aed4ea56e01442d1339b8e7717`，再按现场维护手册执行回退；旧三状态版也保留在历史稳定分支。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
+只停止前屏：`systemctl stop r1-panel.service`，确认控制台和背光恢复；这不会停止温控。当前前屏为 enabled，若不希望下一次开机启动，须另行禁用服务。恢复上一正式顺序时，应先核对 R1 上的 `r1_panel_repository.py.bak-20261009-order-trial` 与 SHA-256 `196e35304101c0b7fb9d4716b13aa2b67ffdc8aed4ea56e01442d1339b8e7717`，再按现场维护手册执行回退；旧三状态版可按 commit `ea8662b` 从 main 历史检出。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
 
-离线验证：在项目虚拟环境内运行 `.venv/bin/python -m unittest discover -s tests -v`。驱动探测、I²C 写入和现场画面效果必须分别实测，单元测试不能替代硬件验证。
+离线验证：在项目虚拟环境内运行 `.venv/bin/python -m unittest discover -s tests -v`。CI 在每次推送和 PR 时以 Python 3.12 / 3.13 复跑同一套测试（`.github/workflows/tests.yml`）。驱动探测、I²C 写入和现场画面效果必须分别实测，单元测试不能替代硬件验证。
