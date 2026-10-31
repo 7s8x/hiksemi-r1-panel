@@ -2,6 +2,10 @@
 
 在海康 R1（型号 `HS-AFS-R1`）上运行 Proxmox VE 时，把这台小主机的**物理前屏、风扇、RGB 灯**和一套 **HTTPS 管理页面**接管起来，让一台原本只能当 NUC 用的机器，变成能看见状态、能调转速、能远程查看的 PVE 节点。
 
+![信息页与风扇页](docs/images/preview.png)
+
+<sub>图中为模拟数据，默认 Mocha 主题，由仓库内的 SVG 模板（`r1_web_information.svg` / `r1_web_fans.svg`）经 `r1_web_views.py` 渲染，非实机截图。</sub>
+
 ---
 
 ## 它能做什么
@@ -198,6 +202,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | `HARDWARE.md` | 硬件探测记录 |
 | `docs/web.md` | Web 管理页的架构、访问方式、维护命令与安全边界 |
 | `docs/ui-preview.md` | 本地模拟预览的运行方式，以及它「不是什么」 |
+| `docs/images/preview.png` | 首屏预览图（模拟数据渲染，非实机截图） |
 
 ---
 
