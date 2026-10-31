@@ -196,8 +196,10 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | `*.service` | systemd 服务定义 |
 | `r1_panel_preflight.sh` / `r1_panel_restore_tty.sh` / `load_it87_for_curve.sh` | 启动前置检查、控制台恢复、驱动加载 |
 | `tests/` | 不接触硬件的离线测试 |
-| `ui_preview.py` | 仅本机回环地址运行的无硬件模拟预览，不连接真实设备 |
+| `ui_preview.py` | 无硬件模拟预览，运行方式见 `docs/ui-preview.md` |
 | `HARDWARE.md` | 硬件探测记录 |
+| `docs/web.md` | Web 管理页的架构、访问方式、维护命令与安全边界 |
+| `docs/ui-preview.md` | 本地模拟预览的运行方式，以及它「不是什么」 |
 
 ---
 
