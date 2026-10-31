@@ -1,56 +1,220 @@
-# HIKSEMI R1 · PVE 前屏
+# HIKSEMI R1 · PVE 前屏管理
 
-## v1.3.1（2026-10-30）
+在海康 R1（型号 `HS-AFS-R1`）上运行 Proxmox VE 时，把这台小主机的**物理前屏、风扇、RGB 灯**和一套 **HTTPS 管理页面**接管起来，让一台原本只能当 NUC 用的机器，变成能看见状态、能调转速、能远程查看的 PVE 节点。
 
-实体前屏与 Web 同步采用已验收的两页界面。信息页将 CPU、内存与 VM 状态合并为“系统”卡，余下空间分配给“存储”卡中的 NVMe、BAY 1–4；显示硬盘型号、温度、已用容量与百分比，以及可用容量。风扇页保留独立的机箱风扇、CPU 风扇环形图，按“温控依据→风扇控制→灯光控制”排列其余卡片。控制卡采用标题、右上说明和左侧状态，说明分别为“智能温控”“机身 RGB”；全速模式显示剩余秒数。
+当前版本 **v1.3.1** ｜ 版本历史见 [Releases](https://github.com/7s8x/hiksemi-r1-panel/releases)
 
-Web 可选主题仅保留 Catppuccin Mocha，旧配色仅作为内部兼容回退。新增 `r1_web_information_web.svg`、`r1_web_fans_web.svg` 和容量查询模块 `r1_web_capacity.py`，部署时须与其他源码、SVG 及字体资源一并复制。实体页已通过现场画面、正反四页切换验收。此发布不包含正在限时观察的性能指标入口和采集代码。
+---
 
-## 当前版（2026-10-28）
+## 它能做什么
 
-信息页五张盘卡在原序列号位置显示存储占用率、绿色百分比与进度条。NVMe 汇总 PVE 的 `local`、`local-lvm`；四个 SATA 实体盘位使用群晖单盘卷的只读占用率，并按 VM100 当前直通路径映射。未能核实来源或映射时显示 `--`。Web 的受限服务从 PVE 最近五分钟存储历史读取 NVMe 占用率，不扩大设备访问权限。实体前屏和 Web 已现场验收，四页双向滑动及控制台返回正常；群晖查询各自缓存 60 秒，前屏与 Web 进程通常合计约每分钟两次受限 SSH 查询。本次源码同步不包含主机密钥、群晖授权内容或本机配置。
+**实体前屏**
+376×960 的 DSI 屏按「信息页 → 风扇页 → PVE 控制台 → 黑屏」四页循环，支持触摸双向滑动。信息页显示 CPU、内存、VM 状态，以及 NVMe 和 BAY 1–4 五张硬盘卡的型号、温度、占用率；风扇页显示机箱风扇与 CPU 风扇的转速环形图。
 
-若要在另一台 R1 上启用 SATA 占用率，需要由管理员在该主机建立仅限查询的 SSH 密钥、固定群晖主机指纹，并在群晖账户授权中使用来源限制、`restrict` 与强制命令执行仓库的 `r1_dsm_usage.sh`。主机本地 `/var/lib/r1-panel/storage-usage.json` 包含 `host`、`user`、`vmid`、`identity_file`、`known_hosts_file` 五个必需字段；非默认 SSH 端口可加 `port`（1–65535，省略时为 22）。非默认端口仍以 `HostKeyAlias` 匹配原有固定主机指纹。配置文件权限应为 600；密钥、主机指纹和该配置文件均不得提交。查询失败、单卷跨盘或盘位映射不明确时，卡片保持 `--`，不猜测使用率。
+**独立软件温控**
+绕过 BIOS 的风扇策略，用 IT8613E 传感器自己算曲线。两路风扇共用一条保守温度曲线，缺传感器或转速为 0 时直接请求全速；「全速」模式 60 秒后自动回落到曲线。
 
-前屏与登录后的 Web 镜像按“信息页→风扇页→PVE 控制台→黑屏”循环；未登录 Web 仅提供脱敏的信息、风扇双页只读预览。新盘发现不再依赖固定序列号或 `drives.json`：显示顺序固定为 NVMe、BAY 1、BAY 2、BAY 3、BAY 4；R1 的 SATA 盘位按控制器物理路径映射，换盘后自动读取容量、类型与温度。盘位路径缺失时标为 `UNVERIFIED`，不把别的盘冒充该盘位。公开预览仅显示 VM 编号，不显示序列号。
+**RGB 灯效**
+常亮、呼吸、彩虹与自定义颜色。总线按 PCI 控制器物理路径动态解析，重启后 I²C 编号变化也不会写错设备。
 
-2026-10-24 现场验收：五张硬盘卡片（含新 1TB HDD 温度）和固定盘位顺序显示正常；用户确认实体屏四页双向滑动、黑屏返回控制台、画面刷新正常。前屏、Web、独立温控服务保持 active/enabled；57 项离线测试通过。整机再次重启后的显示尚未验证。`stable-v1.0.0` 为此前验收的不可变基线；下文的 1.0.0 记录保留为历史说明，不代表当前代码仍使用固定盘表。
+**HTTPS 管理页**
+`8443` 端口，自签证书。未登录时只能看到脱敏的只读双页（硬盘序列号显示为 `****`、虚拟机只显示编号）；登录后可镜像实体屏画面、切页、调亮度、改风扇曲线、控制 RGB、修改密码。
 
-## 1.0.0 历史基线
+---
 
-本私有仓库保存海康 R1 在 PVE 上的前屏、独立软件温控、RGB 灯与 HTTPS Web 管理。1.0.0 对应 2026-10-09 现场验收并已在 R1 运行的版本；旧三状态屏幕可按 commit `ea8662b` 从 main 历史检出（`git show ea8662b`）。版本号只表示当前功能基线，不保证整机重启和所有长期显示故障已得到验证。
+## 硬件与系统要求
 
-## 当前功能与证据（2026-10-09）
+| 项目 | 要求 |
+| --- | --- |
+| 机型 | 海康 R1，`/sys/class/dmi/id/board_name` 必须为 `HS-AFS-R1` |
+| 屏幕 | 376×960 DSI，`/dev/fb0` |
+| 触摸 | `CST0836:00 0911:5288` |
+| 传感器 | IT8613E（需要单独构建的 `it87` 内核模块） |
+| 系统 | Proxmox VE，systemd，Python 3.12+ |
+| 依赖 | 无第三方 Python 包，全部标准库；需要 `openssl` 命令 |
 
-| 功能 | 已验证 | 尚未验证 |
-| --- | --- | --- |
-| 前屏总览 | 376×960 DSI、Cairo；按“信息→风扇→PVE 控制台→黑屏”循环；`pwrite` 写 `/dev/fb0`；控制台进入黑屏时先切 tty2，避免返回控制台只剩光标。24 小时受保护长测已完成，用户现场确认新顺序双向切页，服务已开机自启 | 更长时间运行及下一次整机重启后的实际表现；早先 i915/DSI 旧帧故障是否彻底消失 |
-| 风扇页与温控 | IT8613E `fan2/fan3` RPM/PWM；两路共用保守温度曲线；`FULL SPEED` 60 秒后自动回曲线；两轮短时单路提速与机箱前后出风观察后，用户确认 FAN2 为机箱风扇、FAN3 为 CPU 风扇 | 长时间热循环及内核升级兼容性 |
-| RGB | 前屏与 Web 开关、常亮、呼吸、彩虹及颜色现场验收；按已验证 PCI 控制器定位会变号的 I²C 总线，只访问 `0x26` | 长期运行观察 |
-| HTTPS Web | 未登录可看脱敏的信息／风扇双页；登录后可镜像与控制允许的页面、调亮度；CPU 与磁盘风扇曲线以百分比显示，提交仍经原始 PWM 安全校验；支持 8–256 字符新密码；B 款 R1 标签图标已上线 | Web 控制台切页仍禁用；PVE 主机防火墙尚未启用；本机 HTTP 模拟预览不连接 R1 |
+> 前屏的 preflight 脚本会硬校验机型与触摸设备，不匹配直接退出。这个项目**不追求跨机型通用**。
 
-2026-10-09 20:39 CST 复核：`r1-panel.service`、`r1-fan-curve.service`、`r1-web.service` 均 active/enabled，前屏 `NRestarts=0`；本轮试验的自动回退计时器已取消。新顺序经用户现场双向滑动和数分钟复核。54 项离线测试通过。此仓库不包含驱动二进制、fnOS 安装包、私钥、密码、硬盘序列号或用户专用配置。仓库版面板用本机未追踪的 `drives.json` 读取磁盘标识。
+---
 
-## 文件
+## 安装
 
-- `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py`：当前前屏。运行时从系统路径发现 NVMe 与各实体盘位，不依赖 `drives.json`。`r1_panel_buttons.py` 是 10 月 5 日旧稳定版。
-- `ui_preview.py` / `UI-LOCK-20261008.md` / `UI-PREVIEW.md`：只在本机回环地址运行的无硬件模拟预览与布局记录，不连接 R1，也不能代替实体屏验收。
-- `r1_fan_curve.py` / `r1_fan_control_ipc.py`：保守软件温控与屏幕模式请求；风扇停转或传感器缺失时请求全速。
-- `r1-panel.service` / `r1-fan-curve.service` / `r1-web.service`：当前 PVE 服务定义。启用前必须核实主机型号、驱动、目录及安全回退。
-- `r1_hardware.py` / `r1_hardware_probe.py`：早期只读硬件探测与离线计算，不属于常驻服务。
-- `r1_rgb_probe.py`：只对已知 `0x26` 地址定点读取，不扫整个 I²C 总线。
-- `r1_rgb_trial.py`：单台主机使用的短时 RGB 协议验证，原状态基线写死为 `(2,255,0,0)`；**不要在其他机器或状态改变后直接执行**。
-- `r1_rgb_control.py`：前屏与 Web 共用的 RGB 控制；按固定 PCI 控制器路径动态解析 I²C 总线，读写后回读。
-- `r1_web.py` / `r1_web.html` / `r1_web_favicon.svg` / `r1_fan_config.py`：HTTPS Web 管理、脱敏免登录双页、浏览器标签图标和经校验的持久风扇曲线。密码、证书和曲线实例文件只保存在本机，不进入仓库。
-- `experiments/`：当次风扇通道验证、回退和采样脚本，含当次主机 PWM/背光基线；只作为历史复现资料，不是通用安装程序。
-- `tests/`：不接触真实硬件的手势、风扇读数、RGB 回退测试。
+以下步骤假设部署到 `/root/r1-screen`。所有命令以 root 执行。
 
-不要提交主机专属盘表、真实序列号或任何凭据；`drives.example.json` 仅是历史格式参考。RGB 开关不控制风扇；温控服务独立于前屏和 Web 运行。Web 仅监听已配置的家庭 IPv4 地址，管理功能要求 HTTPS 登录，但应用层来源限制不能替代 PVE 主机防火墙。
+### 1. 部署代码
 
-## 安全边界与回退
+```sh
+mkdir -p /root/r1-screen
+# 将本仓库内容复制到 /root/r1-screen
+cd /root/r1-screen
+python3 -m venv .venv
+```
 
-本项目没有把 R1 Toolbox 的 fnOS 包安装到 PVE，也没有复制其专有程序或强制 `force_id=0x8628`。本机识别到的芯片是 IT8613E；第三方 `it87` 驱动使用固定源码版本构建和哈希校验，二进制不在仓库内。内核升级后必须重新验证/构建，不能假定可直接复用。
+项目本身没有第三方依赖，虚拟环境只是为了锁定解释器版本，避免系统 Python 升级时打断服务。
 
-只停止前屏：`systemctl stop r1-panel.service`，确认控制台和背光恢复；这不会停止温控。当前前屏为 enabled，若不希望下一次开机启动，须另行禁用服务。恢复上一正式顺序时，应先核对 R1 上的 `r1_panel_repository.py.bak-20261009-order-trial` 与 SHA-256 `196e35304101c0b7fb9d4716b13aa2b67ffdc8aed4ea56e01442d1339b8e7717`，再按现场维护手册执行回退；旧三状态版可按 commit `ea8662b` 从 main 历史检出。**不要同时启动两份读取触控和写 framebuffer 的进程**。温控回退必须先检查温度、RPM 和 PWM，再按实际安全状态处理；不要直接把风扇强制降回最低值。无需为前屏回退重启 PVE 或虚拟机。
+### 2. 准备 IT8613E 驱动
 
-离线验证：在项目虚拟环境内运行 `.venv/bin/python -m unittest discover -s tests -v`。CI 在每次推送和 PR 时以 Python 3.12 / 3.13 复跑同一套测试（`.github/workflows/tests.yml`）。驱动探测、I²C 写入和现场画面效果必须分别实测，单元测试不能替代硬件验证。
+`load_it87_for_curve.sh` 会加载一个**为特定内核版本构建**的 `it87.ko`，并用 SHA-256 与 `vermagic` 双重校验。
+
+> ⚠️ 脚本里写死了驱动路径 `/root/r1-it87-test-bd7a566c/it87.ko` 和哈希值，这是作者本机的构建产物。**换机器必须自己重新构建驱动并改掉这两个常量**，不能直接沿用。
+
+内核升级后需要重新构建，不能假定旧模块可用。
+
+### 3. 安装 systemd 服务
+
+```sh
+cp r1-panel.service r1-fan-curve.service r1-web.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable r1-panel.service r1-fan-curve.service r1-web.service
+```
+
+三个服务的职责与依赖顺序：
+
+- `r1-fan-curve.service` — 温控，最先启动，`ExecStopPost` 会把 PWM 恢复到接管前的值
+- `r1-panel.service` — 前屏，依赖温控，启动前跑 `r1_panel_preflight.sh` 等屏幕就绪
+- `r1-web.service` — Web，依赖前两者，已做 `ProtectSystem` / `DevicePolicy` 等沙箱限制
+
+### 4. 初始化 Web
+
+```sh
+/root/r1-screen/.venv/bin/python /root/r1-screen/r1_web.py init
+```
+
+这一步会在 `/var/lib/r1-web/`（权限 0700）下：
+
+- 生成管理员密码摘要，并把**初始密码**写入 `initial-password`（不会打印到终端，需 `cat` 查看）
+- 用 `openssl` 生成 P-256 自签证书，并打印 SHA-256 指纹
+
+**默认监听地址是 `192.168.50.3:8443`**，这是作者的家庭网地址。你需要改 `r1-web.service` 的 `ExecStart`，加上 `--host <你的IP>`，否则服务起不来。
+
+### 5. 启动与验证
+
+```sh
+systemctl start r1-fan-curve.service r1-panel.service r1-web.service
+systemctl status r1-panel.service r1-fan-curve.service r1-web.service --no-pager
+ss -lnt 'sport = :8443'
+cat /run/r1-panel/state.json
+cat /run/r1-fan-curve/status.json
+```
+
+浏览器访问 `https://<你的IP>:8443`，首次需要手动信任自签证书，建议与 `init` 打印的指纹核对。
+
+### 可选：群晖 SATA 占用率
+
+信息页四个 SATA 盘位的占用率来自群晖的只读 SSH 查询，需要你自己准备：
+
+1. 在 R1 上生成**仅限查询**的 SSH 密钥，固定群晖主机指纹
+2. 在群晖账户授权中加来源限制、`restrict`，并强制只允许执行 `r1_dsm_usage.sh`
+3. 在 `/var/lib/r1-panel/storage-usage.json`（权限 600）填 `host`、`user`、`vmid`、`identity_file`、`known_hosts_file`，非默认端口加 `port`
+
+查询失败、单卷跨盘或盘位映射不明确时，卡片显示 `--`，**不会猜测使用率**。不配置这一项不影响其他功能。
+
+---
+
+## 卸载
+
+### 完全卸载
+
+```sh
+# 1. 先停前屏 —— 它会自动恢复控制台光标、背光与 tty1
+systemctl stop r1-panel.service
+
+# 2. 停其余服务（温控会恢复接管前的 PWM）
+systemctl disable --now r1-fan-curve.service r1-web.service
+
+# 3. 删除服务定义
+rm -f /etc/systemd/system/r1-panel.service \
+      /etc/systemd/system/r1-fan-curve.service \
+      /etc/systemd/system/r1-web.service
+systemctl daemon-reload
+
+# 4. 删除程序与运行时数据
+rm -rf /root/r1-screen
+rm -rf /var/lib/r1-panel /var/lib/r1-fan-curve /var/lib/r1-web
+```
+
+**顺序很重要**：先停前屏再删文件。前屏进程被强杀时不会走 `ExecStopPost`，屏幕可能停在黑屏或残留光标状态；真遇到了就手动执行 `r1_panel_restore_tty.sh`，或者切一次 `chvt 1`。
+
+卸载后如果风扇没有回到原来的行为，检查 `it87` 模块是否还在加载、BIOS 风扇策略是否被改动。
+
+### 只停某一部分
+
+```sh
+systemctl stop r1-panel.service      # 只关前屏，温控和 Web 继续跑
+systemctl stop r1-fan-curve.service  # 只关温控，风扇交回硬件默认
+systemctl stop r1-web.service        # 只关 Web，前屏不受影响
+```
+
+想关掉开机自启但保留手动启动：`systemctl disable r1-panel.service`。
+
+---
+
+## 能力边界
+
+### 已验证
+
+- 前屏四页顺序、正反双向滑动、黑屏返回控制台文字完整
+- 两路风扇转速读取与曲线控制，全速模式 60 秒自动回落
+- RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
+- Web 免登录脱敏双页、登录后管理、改密后旧会话失效
+- 70 项离线单元测试（`python -m unittest discover -s tests -v`）
+
+### 尚未验证
+
+- **整机重启后的前屏显示**：部分版本未复测，早期出现过 i915/DSI 旧帧故障
+- **长时间热循环与内核升级兼容性**：`it87` 是固定版本构建，内核一变就要重来
+- **Web 控制台页的反向切页**：从黑屏反向进入控制台只显示光标，因此该切页按钮仍禁用
+
+### 明确不做
+
+- 不安装 R1 Toolbox 的 fnOS 包，不复制其专有程序，不强制 `force_id`
+- 不扫描整条 I²C 总线，RGB 只定点访问已验证地址
+- Web 控制台只镜像画面，**不能**在网页里输入命令
+- 不在仓库内分发 `it87` 驱动二进制
+
+### 重要提醒
+
+单元测试只覆盖不接触硬件的逻辑。**驱动探测、I²C 写入、屏幕实际观感必须现场实测**，离线测试通过不等于硬件正常。
+
+---
+
+## 安全说明
+
+- 仓库**不含**主机密钥、群晖授权、证书、密码、硬盘序列号或任何本机配置。`.gitignore` 已覆盖 `*.bak`、`*.pem`、`*.key`、`known_hosts*`、`storage-usage.json` 等易误提交的类型。
+- Web 有 8 小时会话、CSRF 校验和来源限制，但这些是**应用层**措施。
+- **PVE 主机防火墙默认没有启用**，应用层限制不能替代网络层访问控制。公网暴露前请自行配置防火墙或走内网/VPN。
+- Web 只能提交风扇曲线和「全速/自动」请求，不能直接写 PWM；新曲线不得低于已验证基准。
+
+---
+
+## 目录说明
+
+| 文件 | 作用 |
+| --- | --- |
+| `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py` | 前屏主程序、绘制与运行时状态 |
+| `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha） |
+| `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |
+| `r1_rgb_control.py` / `r1_rgb_probe.py` | RGB 控制与定点探测 |
+| `r1_web.py` / `r1_web.html` / `r1_web_views.py` / `r1_web_capacity.py` | HTTPS 服务与页面渲染 |
+| `r1_storage_usage.py` / `r1_dsm_usage.sh` | 群晖只读占用率采集 |
+| `*.service` | systemd 服务定义 |
+| `r1_panel_preflight.sh` / `r1_panel_restore_tty.sh` / `load_it87_for_curve.sh` | 启动前置检查、控制台恢复、驱动加载 |
+| `tests/` | 不接触硬件的离线测试 |
+| `ui_preview.py` | 仅本机回环地址运行的无硬件模拟预览，不连接真实设备 |
+| `HARDWARE.md` | 硬件探测记录 |
+
+---
+
+## 许可
+
+代码采用 **[PolyForm Noncommercial License 1.0.0](LICENSE)** —— 允许个人学习、研究、修改与非商业分发，**禁止商业使用**。
+
+需要说清楚：这属于 **source-available（源码公开）**，不是 OSI 定义下的「开源」。OSI 的开源定义不允许限制使用领域，所以任何禁止商用的协议都无法被认定为开源许可证。
+
+`assets/fonts/` 下的 Noto Sans SC 字体遵循 **SIL Open Font License 1.1**，许可证全文见 `assets/fonts/OFL.txt`，与本项目自身的许可相互独立。
+
+---
+
+## 版本
+
+每个版本的变更内容、验收记录与部署注意事项，都写在对应的 [Releases](https://github.com/7s8x/hiksemi-r1-panel/releases) 说明里。
