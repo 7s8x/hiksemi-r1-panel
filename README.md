@@ -4,7 +4,7 @@
 
 ![信息页与风扇页](docs/images/preview.png)
 
-<sub>图中为模拟数据，默认 Mocha 主题，由仓库内的 SVG 模板（`r1_web_information.svg` / `r1_web_fans.svg`）经 `r1_web_views.py` 渲染，非实机截图。</sub>
+<sub>图中为模拟数据，默认 Mocha 主题，取自 Web 管理页的「信息页 / 风扇页」布局，由仓库内 SVG 模板渲染，非实机截图。</sub>
 
 ---
 
