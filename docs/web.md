@@ -1,11 +1,11 @@
 # Web 管理页
 
-R1 上的 HTTPS 管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`。它同时承担三种角色：给浏览器看的页面、给未登录访客看的脱敏只读图、以及向其他服务转发控制命令的网关。
+R1 上的管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`。它同时承担三种角色：给浏览器看的页面、给未登录访客看的脱敏只读图、以及向其他服务转发控制命令的网关。
 
 ## 架构
 
 ```
-浏览器 ──HTTPS(8443)──> r1_web.py ──root-only unix socket──> r1_panel_next.py（唯一的前屏进程）
+浏览器 ──HTTP(8080, 默认)──> r1_web.py ──root-only unix socket──> r1_panel_next.py（唯一的前屏进程）
                               │
                               ├──> r1_fan_control_ipc.py（请求全速/自动、读状态）
                               ├──> /var/lib/r1-fan-curve/curves.json（曲线读写）
@@ -16,9 +16,13 @@ R1 上的 HTTPS 管理服务由 `r1-web.service` 提供，源码入口是 `r1_we
 
 ## 访问
 
-- 入口：`https://<R1的IP>:8443`
-- 只监听配置的家庭 IPv4 地址，**不监听 `::`**
-- 自签证书，首次访问需手动信任。建议先核对指纹：
+- 默认 **HTTP**，端口 `8080`，绑定 `0.0.0.0`（监听所有网卡），因此任意内网段都能直接输 IP 访问，无需预先知道网段。
+- 需要 HTTPS 时二选一：
+  - 直接 `r1_web.py serve --tls`（启用 `init` 生成的自签证书）；
+  - 更推荐在前面挂反代（nginx/caddy）做 TLS，由你自行决定如何暴露到公网，同时保留 HTTP 内网直连。
+- 反代场景：`r1_web.py` 会读取 `X-Forwarded-Proto` / `X-Forwarded-Host` 来正确设置会话 cookie 的 `Secure` 标志与同源校验，无需额外配置。
+- 来源白名单默认放行回环 + 全部 RFC1918 私网 + CGNAT；如需收紧，设置环境变量 `R1_WEB_ALLOWED`（逗号分隔 CIDR，如 `192.168.1.0/24,10.0.0.0/8`）。
+- 若使用 `--tls` 自签证书，首次访问需手动信任。建议先核对指纹：
 
 ```sh
 openssl x509 -in /var/lib/r1-web/server.crt -noout -fingerprint -sha256
@@ -79,7 +83,7 @@ Web 上的 RGB 试用需要 `/var/lib/r1-web/rgb-verified` 这个 root-only 标�
 ```sh
 systemctl status r1-panel.service r1-fan-curve.service r1-web.service --no-pager
 systemctl is-enabled r1-panel.service r1-fan-curve.service r1-web.service
-ss -lnt 'sport = :8443'
+ss -lnt 'sport = :8080'
 cat /run/r1-panel/state.json
 cat /run/r1-fan-curve/status.json
 ```

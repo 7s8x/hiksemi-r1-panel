@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Local HTTPS management UI for the R1 panel, fan policy, and light.
+"""Local management UI for the R1 panel, fan policy, and light.
+
+Serves plain HTTP by default (bound to all interfaces) so it works on any LAN
+subnet out of the box. HTTPS is opt-in via --tls for users who terminate TLS
+locally instead of behind a reverse proxy.
 
 The web process never writes the framebuffer or PWM registers. Screen and RGB
 commands are serialized by the panel process; fan requests go to its separate
@@ -47,8 +51,25 @@ INITIAL_FILE = STATE_DIR / "initial-password"
 CERT_FILE = STATE_DIR / "server.crt"
 KEY_FILE = STATE_DIR / "server.key"
 RGB_VERIFIED = STATE_DIR / "rgb-verified"
-ALLOWED = tuple(ipaddress.ip_network(value) for value in
-                ("192.168.50.0/24", "100.64.0.0/10", "127.0.0.1/32"))
+def _load_allowed() -> tuple:
+    """Source networks allowed to reach the web service.
+
+    Defaults to loopback plus all RFC1918 private ranges and CGNAT so the
+    panel works on any LAN subnet out of the box, regardless of the host's
+    actual IP. Override with the R1_WEB_ALLOWED environment variable
+    (comma-separated CIDRs), e.g. "192.168.1.0/24,10.0.0.0/8".
+    """
+    raw = os.environ.get("R1_WEB_ALLOWED")
+    values = [v.strip() for v in raw.split(",") if v.strip()] if raw else (
+        "127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"
+    )
+    try:
+        return tuple(ipaddress.ip_network(v) for v in values)
+    except ValueError as error:
+        raise RuntimeError(f"invalid R1_WEB_ALLOWED entry: {error}") from error
+
+
+ALLOWED = _load_allowed()
 HTML = Path(__file__).with_name("r1_web.html")
 FAVICON = Path(__file__).with_name("r1_web_favicon.svg")
 SESSIONS: dict[str, tuple[float, str]] = {}
@@ -296,9 +317,39 @@ class Handler(BaseHTTPRequestHandler):
                 return None
             return token, record[1]
 
+    def _request_scheme(self) -> str:
+        """Scheme of the request as seen by the client.
+
+        Inspects the live socket, and honors X-Forwarded-Proto when the panel
+        sits behind a reverse proxy that terminates TLS (the proxy, not this
+        process, owns the HTTPS connection).
+        """
+        if isinstance(self.connection, ssl.SSLSocket):
+            return "https"
+        proto = (self.headers.get("X-Forwarded-Proto") or "").lower()
+        if proto in ("https", "http"):
+            return proto
+        return "http"
+
+    def _request_host(self) -> str:
+        """Host as seen by the client, preferring an upstream-set forwarded host."""
+        return self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
+
+    def _session_cookie(self, value: str, max_age: int | None = 28800) -> str:
+        """Build the session Set-Cookie, only flagging Secure over HTTPS.
+
+        Over plain HTTP a Secure cookie would never be sent by the browser,
+        which would silently break login; only set it when the client actually
+        reached us over TLS (directly or via a forwarded proto).
+        """
+        secure = "Secure; " if self._request_scheme() == "https" else ""
+        if value == "" or max_age == 0:
+            return "r1session=; Max-Age=0; " + secure + "HttpOnly; SameSite=Strict; Path=/"
+        return f"r1session={value}; HttpOnly; {secure}SameSite=Strict; Path=/; Max-Age={max_age}"
+
     def _origin_ok(self) -> bool:
         origin = self.headers.get("Origin", "")
-        return origin == "https://" + self.headers.get("Host", "")
+        return origin == self._request_scheme() + "://" + self._request_host()
 
     def _allowed(self) -> bool:
         if not client_allowed(self.client_address[0]):
@@ -410,7 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(401, {"error": "invalid credentials"})
                 return
             self._json(200, {"ok": True, "csrf": csrf},
-                       {"Set-Cookie": f"r1session={token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800"})
+                       {"Set-Cookie": self._session_cookie(token)})
             return
         session = self._session()
         if session is None:
@@ -423,12 +474,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/logout":
                 with AUTH_LOCK:
                     SESSIONS.pop(session[0], None)
-                self._json(200, {"ok": True}, {"Set-Cookie": "r1session=; Max-Age=0; Secure; HttpOnly; SameSite=Strict; Path=/"})
+                self._json(200, {"ok": True}, {"Set-Cookie": self._session_cookie("", max_age=0)})
             elif path == "/api/password":
                 if not isinstance(body, dict) or set(body) != {"current", "new"}:
                     raise ValueError("invalid password request")
                 change_admin_password(body["current"], body["new"])
-                self._json(200, {"ok": True}, {"Set-Cookie": "r1session=; Max-Age=0; Secure; HttpOnly; SameSite=Strict; Path=/"})
+                self._json(200, {"ok": True}, {"Set-Cookie": self._session_cookie("", max_age=0)})
             elif path == "/api/theme":
                 if not isinstance(body, dict) or set(body) != {"theme"}:
                     raise ValueError("invalid theme request")
@@ -481,20 +532,27 @@ def main():
     global PUBLIC_COLLECTOR
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("init", "serve"))
-    parser.add_argument("--host", default="192.168.50.3")
-    parser.add_argument("--port", type=int, default=8443)
+    parser.add_argument("--host", default="0.0.0.0",
+                        help="bind address; 0.0.0.0 listens on all interfaces so the panel "
+                             "is reachable via whatever LAN IP the host happens to have")
+    parser.add_argument("--port", type=int, default=8080, help="TCP port to serve on")
+    parser.add_argument("--tls", action="store_true",
+                        help="serve over HTTPS using the init-generated or a supplied cert/key")
+    parser.add_argument("--cert", default=None, help="TLS certificate path (used with --tls)")
+    parser.add_argument("--key", default=None, help="TLS private key path (used with --tls)")
     args = parser.parse_args()
     if args.action == "init":
         initialize()
         return
-    if not all(path.is_file() for path in (ADMIN_FILE, CERT_FILE, KEY_FILE)):
-        raise RuntimeError("run init before serving")
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    if args.tls:
+        if not all(path.is_file() for path in (ADMIN_FILE, CERT_FILE, KEY_FILE)):
+            raise RuntimeError("run init before serving with TLS")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(args.cert or str(CERT_FILE), args.key or str(KEY_FILE))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15)
     PUBLIC_COLLECTOR.start()
     try:
