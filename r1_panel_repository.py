@@ -116,14 +116,20 @@ def _hwmon_topology(hwmon_root: Path = _HW_MON_ROOT, ttl: float = 5.0) -> list[d
         return slot["entries"]
     built = []
     for directory in sorted(hwmon_root.glob("hwmon*")):
-        device_link = directory / "device"
-        built.append({
-            "path": directory,
-            "name": read_text(directory / "name"),
-            "device": device_link.resolve() if device_link.is_symlink() else None,
-            "nodes": {child.name: child for child in directory.iterdir()
-                      if child.is_file()},
-        })
+        try:
+            device_link = directory / "device"
+            built.append({
+                "path": directory,
+                "name": read_text(directory / "name"),
+                "device": device_link.resolve() if device_link.is_symlink() else None,
+                "nodes": {child.name: child for child in directory.iterdir()
+                          if child.is_file()},
+            })
+        except (OSError, RuntimeError):
+            # A hot-unplugged hwmon device may vanish mid-scan
+            # (FileNotFoundError on iterdir/read_text).  Skip the single gone
+            # sensor instead of aborting the entire snapshot round.
+            continue
     _HW_MON_TOPOLOGY[hwmon_root] = {"at": now, "entries": built}
     return built
 
@@ -164,12 +170,19 @@ def fan_readings(hwmon_root: Path = _HW_MON_ROOT):
     return values
 
 
-def drive_temperature(by_id):
-    disk = Path("/dev/disk/by-id", by_id).resolve()
+def drive_temperature(by_id, hwmon_root: Path = _HW_MON_ROOT,
+                      by_id_root: Path = Path("/dev/disk/by-id"),
+                      block_root: Path = Path("/sys/block")):
+    disk = Path(by_id_root, by_id).resolve()
     if not disk.exists():
         return None
-    for entry in _hwmon_topology():
-        if entry["name"] == "drivetemp" and entry["device"] == disk:
+    # The cached topology stores each hwmon entry's ``device`` as the resolved
+    # sysfs path (e.g. /sys/devices/.../hostX/targetX:X:X/X:X:X:X).  That must be
+    # matched against the disk's own sysfs device path, not the /dev/sdX node,
+    # or SATA drive temperatures are silently dropped.
+    device = Path(block_root, disk.name, "device").resolve()
+    for entry in _hwmon_topology(hwmon_root):
+        if entry["name"] == "drivetemp" and entry["device"] == device:
             node = entry["nodes"].get("temp1_input")
             if node is None:
                 return None
