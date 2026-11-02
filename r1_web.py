@@ -82,6 +82,63 @@ def _load_trusted_proxies() -> tuple:
 
 
 TRUSTED_PROXIES = _load_trusted_proxies()
+# --- Local access log (configurable, privacy-aware) ---
+# The web service deliberately avoids logging request bodies, session cookies,
+# or framebuffer content. When enabled (the default), it writes a small access
+# log with query strings stripped and sensitive endpoints redacted. Disable it
+# with R1_WEB_LOG=0 (also accepts off/false/no/disable/disabled).
+_LOG_FLAG = os.environ.get("R1_WEB_LOG", "1").strip().lower()
+LOG_ENABLED = _LOG_FLAG not in ("0", "off", "false", "no", "disable", "disabled")
+WEB_LOG_FILE = STATE_DIR / "access.log"
+_WEB_LOG_MAX_BYTES = 1_000_000
+_WEB_LOG_BACKUPS = 3
+_WEB_LOG_LOCK = threading.Lock()
+_SENSITIVE_PREFIXES = ("/api/login", "/api/password", "/api/session")
+
+
+def _escape_log_text(value: str) -> str:
+    """Keep each event on one line without terminal control characters."""
+    return "".join(f"\\x{ord(char):02x}" if ord(char) < 32 or ord(char) == 127 else char
+                   for char in str(value))
+
+
+def _sanitize_access_path(path: str) -> str:
+    """Strip userinfo, query and fragment; redact authentication paths."""
+    try:
+        path = urlsplit(path or "").path
+    except ValueError:
+        return "<redacted>"
+    if any(path.startswith(prefix) for prefix in _SENSITIVE_PREFIXES):
+        return "<redacted>"
+    return _escape_log_text(path)
+
+
+def _web_log(format: str, *args) -> None:
+    """Append one line to the local access log. Never raises."""
+    if not LOG_ENABLED:
+        return
+    try:
+        message = format % args if args else format
+    except Exception:
+        message = str(format)
+    line = time.strftime("%Y-%m-%dT%H:%M:%S%z") + " " + _escape_log_text(message) + "\n"
+    try:
+        with _WEB_LOG_LOCK:
+            if WEB_LOG_FILE.exists() and WEB_LOG_FILE.stat().st_size > _WEB_LOG_MAX_BYTES:
+                for i in range(_WEB_LOG_BACKUPS - 1, 0, -1):
+                    src = WEB_LOG_FILE.with_suffix(f".log.{i}")
+                    dst = WEB_LOG_FILE.with_suffix(f".log.{i + 1}")
+                    if src.exists():
+                        src.replace(dst)
+                WEB_LOG_FILE.replace(WEB_LOG_FILE.with_suffix(".log.1"))
+            WEB_LOG_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+            with os.fdopen(os.open(WEB_LOG_FILE, flags, 0o600), "a", encoding="utf-8") as fh:
+                os.fchmod(fh.fileno(), 0o600)
+                fh.write(line)
+    except OSError:
+        pass
+
 HTML = Path(__file__).with_name("r1_web.html")
 FAVICON = Path(__file__).with_name("r1_web_favicon.svg")
 SESSIONS: dict[str, tuple[float, str]] = {}
@@ -292,9 +349,18 @@ def client_allowed(address: str) -> bool:
 class Handler(BaseHTTPRequestHandler):
     server_version = "R1PanelWeb/1"
 
+    def log_request(self, code="-", size="-"):
+        if not LOG_ENABLED:
+            return
+        path = _sanitize_access_path(getattr(self, "path", ""))
+        _web_log("%s %s %s %s", self.address_string(), getattr(self, "command", None) or "-", path, code)
+
     def log_message(self, format, *args):
-        # Deliberately avoid logging URLs, sessions, or console content.
-        pass
+        # http.server error strings can contain the entire raw request line.
+        # Log only structured, sanitized metadata, never format or its arguments.
+        if LOG_ENABLED:
+            _web_log("error %s %s", self.address_string(),
+                     _sanitize_access_path(getattr(self, "path", "")))
 
     def _send(self, code: int, body: bytes, mime: str, extra: dict | None = None):
         self.send_response(code)

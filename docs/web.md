@@ -31,6 +31,23 @@ openssl x509 -in /var/lib/r1-web/server.crt -noout -fingerprint -sha256
 - 初始管理员密码只写在 `/var/lib/r1-web/initial-password`（root 可读），`init` 时不会打印到终端
 - 登录后 8 小时会话；改密成功后所有会话立即失效，需重新登录
 
+## 本地访问日志
+
+Web 服务默认会写一个轻量访问日志到 `/var/lib/r1-web/access.log`，便于运维排查。出于隐私考虑，日志**只记录时间戳、来源 IP、HTTP 方法、路径与状态码**，并且：
+
+- 自动**剥离 URL 中的查询串**（避免记录会话令牌、密码等敏感参数）；
+- 对 `/api/login`、`/api/password`、`/api/session` 等认证端点**整体脱敏**为 `<redacted>`；
+- **绝不记录**请求体、会话 cookie 内容、实体屏画面或协议错误中的原始请求行；
+- 剥离绝对 URL 的 userinfo，并转义控制字符，防止日志伪造；日志文件权限固定为 `0600`（仅属主可读写）。
+
+日志按 1 MB 滚动，保留最近 3 个备份，避免无限增长。
+
+如需关闭，设置环境变量 `R1_WEB_LOG=0`（也接受 `off` / `false` / `no` / `disable` / `disabled`）：
+
+```sh
+R1_WEB_LOG=0 r1_web.py serve
+```
+
 ## 渲染模板
 
 **前屏和 Web 页共用同一套模板**，即文件名带 `_web` 的两份：
