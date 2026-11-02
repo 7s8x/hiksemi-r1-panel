@@ -16,7 +16,8 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from r1_web import (FAILURES, Handler, SESSIONS, change_admin_password, client_allowed,
+from r1_web import (FAILURES, Handler, LOG_ENABLED, SESSIONS, WEB_LOG_FILE,
+                    _sanitize_access_path, _web_log, change_admin_password, client_allowed,
                     collect_public_frames, hash_password, public_snapshot, rgb_png,
                     verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
@@ -412,6 +413,33 @@ class WebTests(unittest.TestCase):
         self.assertTrue(encoded.startswith(b"\x89PNG\r\n\x1a\n"))
         with self.assertRaises(ValueError):
             rgb_png(b"short", WIDTH * 4)
+
+
+class LogTests(unittest.TestCase):
+    def test_sanitize_strips_query_and_redacts_auth(self):
+        self.assertEqual(_sanitize_access_path("/api/status?token=abc"), "/api/status")
+        self.assertEqual(_sanitize_access_path("/api/login?password=secret"), "<redacted>")
+        self.assertEqual(_sanitize_access_path("/api/password"), "<redacted>")
+        self.assertEqual(_sanitize_access_path("/api/session?a=1"), "<redacted>")
+        self.assertEqual(_sanitize_access_path("/api/frame?x=1"), "/api/frame")
+        self.assertEqual(_sanitize_access_path(""), "")
+
+    def test_web_log_writes_when_enabled(self):
+        with TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "access.log"
+            with patch("r1_web.LOG_ENABLED", True), patch("r1_web.WEB_LOG_FILE", log_path):
+                _web_log("%s %s", "1.2.3.4", "/api/status")
+            self.assertTrue(log_path.exists())
+            content = log_path.read_text()
+            self.assertIn("1.2.3.4 /api/status", content)
+            self.assertNotIn("token=", content)
+
+    def test_web_log_silent_when_disabled(self):
+        with TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "access.log"
+            with patch("r1_web.LOG_ENABLED", False), patch("r1_web.WEB_LOG_FILE", log_path):
+                _web_log("%s", "should-not-appear")
+            self.assertFalse(log_path.exists())
 
 
 if __name__ == "__main__":

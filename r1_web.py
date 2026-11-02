@@ -16,6 +16,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import ssl
@@ -49,6 +50,52 @@ KEY_FILE = STATE_DIR / "server.key"
 RGB_VERIFIED = STATE_DIR / "rgb-verified"
 ALLOWED = tuple(ipaddress.ip_network(value) for value in
                 ("192.168.50.0/24", "100.64.0.0/10", "127.0.0.1/32"))
+
+# --- Local access log (configurable, privacy-aware) ---
+# The web service deliberately avoids logging request bodies, session cookies,
+# or framebuffer content. When enabled (the default), it writes a small access
+# log with query strings stripped and sensitive endpoints redacted. Disable it
+# with R1_WEB_LOG=0 (also accepts off/false/no/disable/disabled).
+_LOG_FLAG = os.environ.get("R1_WEB_LOG", "1").strip().lower()
+LOG_ENABLED = _LOG_FLAG not in ("0", "off", "false", "no", "disable", "disabled")
+WEB_LOG_FILE = STATE_DIR / "access.log"
+_WEB_LOG_MAX_BYTES = 1_000_000
+_WEB_LOG_BACKUPS = 3
+_WEB_LOG_LOCK = threading.Lock()
+_SENSITIVE_PREFIXES = ("/api/login", "/api/password", "/api/session")
+
+
+def _sanitize_access_path(path: str) -> str:
+    """Strip query strings and redact auth endpoints before logging."""
+    path = (path or "").split("?", 1)[0]
+    if any(path.startswith(p) for p in _SENSITIVE_PREFIXES):
+        return "<redacted>"
+    return path
+
+
+def _web_log(format: str, *args) -> None:
+    """Append one line to the local access log. Never raises."""
+    if not LOG_ENABLED:
+        return
+    try:
+        message = format % args if args else format
+    except Exception:
+        message = str(format)
+    line = time.strftime("%Y-%m-%dT%H:%M:%S%z") + " " + message + "\n"
+    try:
+        with _WEB_LOG_LOCK:
+            if WEB_LOG_FILE.exists() and WEB_LOG_FILE.stat().st_size > _WEB_LOG_MAX_BYTES:
+                for i in range(_WEB_LOG_BACKUPS - 1, 0, -1):
+                    src = WEB_LOG_FILE.with_suffix(f".log.{i}")
+                    dst = WEB_LOG_FILE.with_suffix(f".log.{i + 1}")
+                    if src.exists():
+                        src.replace(dst)
+                WEB_LOG_FILE.replace(WEB_LOG_FILE.with_suffix(".log.1"))
+            WEB_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with WEB_LOG_FILE.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+    except OSError:
+        pass
 HTML = Path(__file__).with_name("r1_web.html")
 FAVICON = Path(__file__).with_name("r1_web_favicon.svg")
 SESSIONS: dict[str, tuple[float, str]] = {}
@@ -259,9 +306,23 @@ def client_allowed(address: str) -> bool:
 class Handler(BaseHTTPRequestHandler):
     server_version = "R1PanelWeb/1"
 
+    def log_request(self, code="-", size="-"):
+        if not LOG_ENABLED:
+            return
+        path = _sanitize_access_path(self.path)
+        _web_log("%s %s %s %s", self.address_string(), self.command or "-", path, code)
+
     def log_message(self, format, *args):
-        # Deliberately avoid logging URLs, sessions, or console content.
-        pass
+        # Route protocol/runtime errors to the same local log, but never log
+        # raw request lines (which can carry query strings). Strip defensively.
+        if not LOG_ENABLED:
+            return
+        try:
+            text = format % args
+        except Exception:
+            text = " ".join(str(a) for a in args) if args else str(format)
+        text = re.sub(r"\?\S+", "?<redacted>", text)
+        _web_log("error %s", text)
 
     def _send(self, code: int, body: bytes, mime: str, extra: dict | None = None):
         self.send_response(code)
