@@ -70,6 +70,18 @@ def _load_allowed() -> tuple:
 
 
 ALLOWED = _load_allowed()
+
+
+def _load_trusted_proxies() -> tuple:
+    """Forwarding headers are trusted only from explicitly configured peers."""
+    values = os.environ.get("R1_WEB_TRUSTED_PROXIES", "").split(",")
+    try:
+        return tuple(ipaddress.ip_network(value.strip()) for value in values if value.strip())
+    except ValueError as error:
+        raise RuntimeError(f"invalid R1_WEB_TRUSTED_PROXIES entry: {error}") from error
+
+
+TRUSTED_PROXIES = _load_trusted_proxies()
 HTML = Path(__file__).with_name("r1_web.html")
 FAVICON = Path(__file__).with_name("r1_web_favicon.svg")
 SESSIONS: dict[str, tuple[float, str]] = {}
@@ -317,23 +329,33 @@ class Handler(BaseHTTPRequestHandler):
                 return None
             return token, record[1]
 
+    def _trusted_proxy(self) -> bool:
+        try:
+            peer = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return False
+        return any(peer in network for network in TRUSTED_PROXIES)
+
     def _request_scheme(self) -> str:
         """Scheme of the request as seen by the client.
 
-        Inspects the live socket, and honors X-Forwarded-Proto when the panel
+        Inspects the live socket, and honors X-Forwarded-Proto only from an
+        explicitly trusted proxy when the panel
         sits behind a reverse proxy that terminates TLS (the proxy, not this
         process, owns the HTTPS connection).
         """
         if isinstance(self.connection, ssl.SSLSocket):
             return "https"
-        proto = (self.headers.get("X-Forwarded-Proto") or "").lower()
+        proto = ((self.headers.get("X-Forwarded-Proto") or "").lower()
+                 if self._trusted_proxy() else "")
         if proto in ("https", "http"):
             return proto
         return "http"
 
     def _request_host(self) -> str:
         """Host as seen by the client, preferring an upstream-set forwarded host."""
-        return self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
+        forwarded = self.headers.get("X-Forwarded-Host") if self._trusted_proxy() else None
+        return forwarded or self.headers.get("Host", "")
 
     def _session_cookie(self, value: str, max_age: int | None = 28800) -> str:
         """Build the session Set-Cookie, only flagging Secure over HTTPS.
@@ -544,15 +566,24 @@ def main():
     if args.action == "init":
         initialize()
         return
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    server.daemon_threads = True
+    if not ADMIN_FILE.is_file():
+        raise RuntimeError("run init before serving")
+    context = None
     if args.tls:
-        if not all(path.is_file() for path in (ADMIN_FILE, CERT_FILE, KEY_FILE)):
-            raise RuntimeError("run init before serving with TLS")
+        cert, key = Path(args.cert or CERT_FILE), Path(args.key or KEY_FILE)
+        if not all(path.is_file() for path in (cert, key)):
+            raise RuntimeError("TLS certificate/key missing; run init or supply --cert and --key")
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
-        context.load_cert_chain(args.cert or str(CERT_FILE), args.key or str(KEY_FILE))
-        server.socket = context.wrap_socket(server.socket, server_side=True)
+        context.load_cert_chain(str(cert), str(key))
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server.daemon_threads = True
+    if context is not None:
+        try:
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+        except Exception:
+            server.server_close()
+            raise
     PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15)
     PUBLIC_COLLECTOR.start()
     try:
@@ -564,3 +595,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

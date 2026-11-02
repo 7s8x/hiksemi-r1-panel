@@ -20,7 +20,7 @@ R1 上的管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`�
 - 需要 HTTPS 时二选一：
   - 直接 `r1_web.py serve --tls`（启用 `init` 生成的自签证书）；
   - 更推荐在前面挂反代（nginx/caddy）做 TLS，由你自行决定如何暴露到公网，同时保留 HTTP 内网直连。
-- 反代场景：`r1_web.py` 会读取 `X-Forwarded-Proto` / `X-Forwarded-Host` 来正确设置会话 cookie 的 `Secure` 标志与同源校验，无需额外配置。
+- 反代场景：默认忽略客户端的 `X-Forwarded-Proto` / `X-Forwarded-Host`。仅在 `R1_WEB_TRUSTED_PROXIES` 显式配置可信代理来源 CIDR 后，才使用这些头设置 cookie 和校验同源，例如同机反代配置 `R1_WEB_TRUSTED_PROXIES=127.0.0.1/32`。代理必须覆盖客户端传入的转发头。
 - 来源白名单默认放行回环 + 全部 RFC1918 私网 + CGNAT；如需收紧，设置环境变量 `R1_WEB_ALLOWED`（逗号分隔 CIDR，如 `192.168.1.0/24,10.0.0.0/8`）。
 - 若使用 `--tls` 自签证书，首次访问需手动信任。建议先核对指纹：
 
@@ -94,3 +94,4 @@ cat /run/r1-fan-curve/status.json
 - **PVE 主机防火墙默认没有启用**，应用层限制不能替代网络层访问控制。公网暴露前必须自行配置防火墙或走内网 / VPN
 - 不要把 `/var/lib/r1-web/` 下的 `admin.json`、`server.key`、`initial-password` 提交到仓库或截图外发
 - `http://127.0.0.1:8766/` 是本机模拟预览，不是生产 Web 的 HTTP 副本，详见 [ui-preview.md](ui-preview.md)
+

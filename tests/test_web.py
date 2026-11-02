@@ -2,6 +2,7 @@
 
 import sys
 import json
+import ipaddress
 import time
 from http import cookies
 from http.server import ThreadingHTTPServer
@@ -360,7 +361,8 @@ class WebTests(unittest.TestCase):
 
             try:
                 with patch("r1_web.ADMIN_FILE", admin), patch.dict(SESSIONS, {}, clear=True), \
-                        patch.dict(FAILURES, {}, clear=True):
+                        patch.dict(FAILURES, {}, clear=True), \
+                        patch("r1_web.TRUSTED_PROXIES", (ipaddress.ip_network("127.0.0.1/32"),)):
                     self.assertNotIn("Secure", login())
                     self.assertIn("Secure", login(forwarded_proto="https"))
             finally:
@@ -455,3 +457,4 @@ class WebTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
