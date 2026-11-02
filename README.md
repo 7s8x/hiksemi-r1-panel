@@ -19,8 +19,8 @@
 **RGB 灯效**
 常亮、呼吸、彩虹与自定义颜色。总线按 PCI 控制器物理路径动态解析，重启后 I²C 编号变化也不会写错设备。
 
-**HTTPS 管理页**
-`8443` 端口，自签证书。未登录时只能看到脱敏的只读双页（硬盘序列号显示为 `****`、虚拟机只显示编号）；登录后可镜像实体屏画面、切页、调亮度、改风扇曲线、控制 RGB、修改密码。
+**HTTP 管理页（默认）**
+`8080` 端口，默认明文 HTTP，方便内网直接输 IP 访问、避免自签证书告警。需要时可用 `r1_web.py serve --tls` 启用自带自签证书走 HTTPS，或更推荐在前面挂反代（nginx/caddy）做 TLS、由你自行决定如何暴露到公网。未登录时只能看到脱敏的只读双页（硬盘序列号显示为 `****`、虚拟机只显示编号）；登录后可镜像实体屏画面、切页、调亮度、改风扇曲线、控制 RGB、修改密码。
 
 ---
 
@@ -90,12 +90,12 @@ systemctl enable r1-panel.service r1-fan-curve.service r1-web.service
 ```sh
 systemctl start r1-fan-curve.service r1-panel.service r1-web.service
 systemctl status r1-panel.service r1-fan-curve.service r1-web.service --no-pager
-ss -lnt 'sport = :8443'
+ss -lnt 'sport = :8080'
 cat /run/r1-panel/state.json
 cat /run/r1-fan-curve/status.json
 ```
 
-浏览器访问 `https://<你的IP>:8443`，首次需要手动信任自签证书，建议与 `init` 打印的指纹核对。
+浏览器访问 `http://<你的IP>:8080`。服务默认监听所有网卡、放行全部 RFC1918 私网与回环，因此在任意内网段都能直接访问；如需收紧来源，用环境变量 `R1_WEB_ALLOWED`（逗号分隔 CIDR，如 `192.168.1.0/24,10.0.0.0/8`）限定。若需 HTTPS：① 直接 `serve --tls`（启用自带自签证书，首次仍需手动信任），或 ② 在前端挂反代做 TLS（推荐，便于公网暴露，同时保留 HTTP 内网直连）。
 
 ### 可选：群晖 SATA 占用率
 
@@ -193,7 +193,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha） |
 | `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |
 | `r1_rgb_control.py` / `r1_rgb_probe.py` | RGB 控制与定点探测 |
-| `r1_web.py` / `r1_web.html` / `r1_web_views.py` / `r1_web_capacity.py` | HTTPS 服务与页面渲染 |
+| `r1_web.py` / `r1_web.html` / `r1_web_views.py` / `r1_web_capacity.py` | HTTP/HTTPS 服务与页面渲染 |
 | `r1_storage_usage.py` / `r1_dsm_usage.sh` | 群晖只读占用率采集 |
 | `*.service` | systemd 服务定义 |
 | `r1_panel_preflight.sh` / `r1_panel_restore_tty.sh` / `load_it87_for_curve.sh` | 启动前置检查、控制台恢复、驱动加载 |

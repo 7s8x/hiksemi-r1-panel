@@ -2,6 +2,7 @@
 
 import sys
 import json
+import ipaddress
 import time
 from http import cookies
 from http.server import ThreadingHTTPServer
@@ -16,8 +17,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from r1_web import (FAILURES, Handler, LOG_ENABLED, SESSIONS, WEB_LOG_FILE,
-                    _sanitize_access_path, _web_log, change_admin_password, client_allowed,
+from r1_web import (FAILURES, Handler, LOG_ENABLED, WEB_LOG_FILE, _sanitize_access_path, _web_log, SESSIONS, change_admin_password, client_allowed,
                     collect_public_frames, hash_password, public_snapshot, rgb_png,
                     verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
@@ -200,7 +200,7 @@ class WebTests(unittest.TestCase):
 
         def submit(theme, cookie=None, csrf=None):
             headers = {"Content-Type": "application/json",
-                       "Origin": f"https://127.0.0.1:{server.server_port}"}
+                       "Origin": f"http://127.0.0.1:{server.server_port}"}
             if cookie:
                 headers["Cookie"] = cookie
             if csrf:
@@ -289,7 +289,7 @@ class WebTests(unittest.TestCase):
 
         def submit(cookie=None, csrf=None):
             headers = {"Content-Type": "application/json",
-                       "Origin": f"https://127.0.0.1:{server.server_port}"}
+                       "Origin": f"http://127.0.0.1:{server.server_port}"}
             if cookie:
                 headers["Cookie"] = cookie
             if csrf:
@@ -324,11 +324,51 @@ class WebTests(unittest.TestCase):
         self.assertEqual(preview_web_source(), source)
 
     def test_source_allowlist(self):
+        # Default allowlist covers loopback, CGNAT, and all RFC1918 private
+        # ranges so the panel works on any LAN subnet out of the box.
         self.assertTrue(client_allowed("192.168.50.8"))
+        self.assertTrue(client_allowed("192.168.99.197"))
+        self.assertTrue(client_allowed("10.0.0.5"))
+        self.assertTrue(client_allowed("172.16.4.4"))
         self.assertTrue(client_allowed("100.101.1.1"))
-        self.assertFalse(client_allowed("192.168.99.197"))
         self.assertFalse(client_allowed("8.8.8.8"))
         self.assertFalse(client_allowed("::1"))
+
+    def test_session_cookie_secure_flag_tracks_scheme(self):
+        with TemporaryDirectory() as directory:
+            admin = Path(directory) / "admin.json"
+            admin.write_text(json.dumps(hash_password("password 12345")))
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            server.daemon_threads = True
+            thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+
+            def login(forwarded_proto=None):
+                scheme = "https" if forwarded_proto == "https" else "http"
+                headers = {"Content-Type": "application/json",
+                           "Origin": f"{scheme}://127.0.0.1:{server.server_port}"}
+                if forwarded_proto:
+                    headers["X-Forwarded-Proto"] = forwarded_proto
+                request = Request(base + "/api/login",
+                                 data=json.dumps({"password": "password 12345"}).encode(), headers=headers)
+                try:
+                    response = urlopen(request, timeout=2)
+                except HTTPError as error:
+                    response = error
+                with response:
+                    return response.headers.get("Set-Cookie", "")
+
+            try:
+                with patch("r1_web.ADMIN_FILE", admin), patch.dict(SESSIONS, {}, clear=True), \
+                        patch.dict(FAILURES, {}, clear=True), \
+                        patch("r1_web.TRUSTED_PROXIES", (ipaddress.ip_network("127.0.0.1/32"),)):
+                    self.assertNotIn("Secure", login())
+                    self.assertIn("Secure", login(forwarded_proto="https"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_password_hash_is_salted(self):
         one = hash_password("correct horse battery staple")
@@ -376,7 +416,7 @@ class WebTests(unittest.TestCase):
                 headers = {}
                 if body is not None:
                     headers.update({"Content-Type": "application/json",
-                                    "Origin": f"https://127.0.0.1:{server.server_port}"})
+                                    "Origin": f"http://127.0.0.1:{server.server_port}"})
                 if cookie:
                     headers["Cookie"] = cookie
                 if csrf:
@@ -444,3 +484,4 @@ class LogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

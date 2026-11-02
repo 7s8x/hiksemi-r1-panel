@@ -1,11 +1,11 @@
 # Web 管理页
 
-R1 上的 HTTPS 管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`。它同时承担三种角色：给浏览器看的页面、给未登录访客看的脱敏只读图、以及向其他服务转发控制命令的网关。
+R1 上的管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`。它同时承担三种角色：给浏览器看的页面、给未登录访客看的脱敏只读图、以及向其他服务转发控制命令的网关。
 
 ## 架构
 
 ```
-浏览器 ──HTTPS(8443)──> r1_web.py ──root-only unix socket──> r1_panel_next.py（唯一的前屏进程）
+浏览器 ──HTTP(8080, 默认)──> r1_web.py ──root-only unix socket──> r1_panel_next.py（唯一的前屏进程）
                               │
                               ├──> r1_fan_control_ipc.py（请求全速/自动、读状态）
                               ├──> /var/lib/r1-fan-curve/curves.json（曲线读写）
@@ -16,9 +16,13 @@ R1 上的 HTTPS 管理服务由 `r1-web.service` 提供，源码入口是 `r1_we
 
 ## 访问
 
-- 入口：`https://<R1的IP>:8443`
-- 只监听配置的家庭 IPv4 地址，**不监听 `::`**
-- 自签证书，首次访问需手动信任。建议先核对指纹：
+- 默认 **HTTP**，端口 `8080`，绑定 `0.0.0.0`（监听所有网卡），因此任意内网段都能直接输 IP 访问，无需预先知道网段。
+- 需要 HTTPS 时二选一：
+  - 直接 `r1_web.py serve --tls`（启用 `init` 生成的自签证书）；
+  - 更推荐在前面挂反代（nginx/caddy）做 TLS，由你自行决定如何暴露到公网，同时保留 HTTP 内网直连。
+- 反代场景：默认忽略客户端的 `X-Forwarded-Proto` / `X-Forwarded-Host`。仅在 `R1_WEB_TRUSTED_PROXIES` 显式配置可信代理来源 CIDR 后，才使用这些头设置 cookie 和校验同源，例如同机反代配置 `R1_WEB_TRUSTED_PROXIES=127.0.0.1/32`。代理必须覆盖客户端传入的转发头。
+- 来源白名单默认放行回环 + 全部 RFC1918 私网 + CGNAT；如需收紧，设置环境变量 `R1_WEB_ALLOWED`（逗号分隔 CIDR，如 `192.168.1.0/24,10.0.0.0/8`）。
+- 若使用 `--tls` 自签证书，首次访问需手动信任。建议先核对指纹：
 
 ```sh
 openssl x509 -in /var/lib/r1-web/server.crt -noout -fingerprint -sha256
@@ -33,7 +37,8 @@ Web 服务默认会写一个轻量访问日志到 `/var/lib/r1-web/access.log`�
 
 - 自动**剥离 URL 中的查询串**（避免记录会话令牌、密码等敏感参数）；
 - 对 `/api/login`、`/api/password`、`/api/session` 等认证端点**整体脱敏**为 `<redacted>`；
-- **绝不记录**请求体、会话 cookie 内容或实体屏画面。
+- **绝不记录**请求体、会话 cookie 内容、实体屏画面或协议错误中的原始请求行；
+- 剥离绝对 URL 的 userinfo，并转义控制字符，防止日志伪造；日志文件权限固定为 `0600`（仅属主可读写）。
 
 日志按 1 MB 滚动，保留最近 3 个备份，避免无限增长。
 
@@ -95,7 +100,7 @@ Web 上的 RGB 试用需要 `/var/lib/r1-web/rgb-verified` 这个 root-only 标�
 ```sh
 systemctl status r1-panel.service r1-fan-curve.service r1-web.service --no-pager
 systemctl is-enabled r1-panel.service r1-fan-curve.service r1-web.service
-ss -lnt 'sport = :8443'
+ss -lnt 'sport = :8080'
 cat /run/r1-panel/state.json
 cat /run/r1-fan-curve/status.json
 ```
@@ -106,3 +111,4 @@ cat /run/r1-fan-curve/status.json
 - **PVE 主机防火墙默认没有启用**，应用层限制不能替代网络层访问控制。公网暴露前必须自行配置防火墙或走内网 / VPN
 - 不要把 `/var/lib/r1-web/` 下的 `admin.json`、`server.key`、`initial-password` 提交到仓库或截图外发
 - `http://127.0.0.1:8766/` 是本机模拟预览，不是生产 Web 的 HTTP 副本，详见 [ui-preview.md](ui-preview.md)
+
