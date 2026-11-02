@@ -94,28 +94,67 @@ def read_text(path):
         return ""
 
 
+_HW_MON_ROOT = Path("/sys/class/hwmon")
+_HW_MON_TOPOLOGY: dict[Path, dict] = {}
+
+
+def _hwmon_topology(hwmon_root: Path = _HW_MON_ROOT, ttl: float = 5.0) -> list[dict]:
+    """Cache the static hwmon directory layout, not its sensor values.
+
+    A single snapshot otherwise walks ``/sys/class/hwmon`` once per
+    temperature/fan/drive lookup (7-8 passes on a four-bay host).  The layout
+    is fixed at runtime unless a sensor is hot-plugged, so caching the
+    directory names, ``name`` files, resolved ``device`` links and value-file
+    set for a few seconds is safe; the actual readings are always re-read.
+    The cache is keyed by the scanned root so callers may still pass a custom
+    (test) root without cross-contamination.
+    """
+    global _HW_MON_TOPOLOGY
+    now = time.monotonic()
+    slot = _HW_MON_TOPOLOGY.get(hwmon_root)
+    if slot is not None and now - slot["at"] < ttl:
+        return slot["entries"]
+    built = []
+    for directory in sorted(hwmon_root.glob("hwmon*")):
+        device_link = directory / "device"
+        built.append({
+            "path": directory,
+            "name": read_text(directory / "name"),
+            "device": device_link.resolve() if device_link.is_symlink() else None,
+            "nodes": {child.name: child for child in directory.iterdir()
+                      if child.is_file()},
+        })
+    _HW_MON_TOPOLOGY[hwmon_root] = {"at": now, "entries": built}
+    return built
+
+
 def temp_for_hwmon(name):
-    for path in glob.glob("/sys/class/hwmon/hwmon*"):
-        if read_text(path + "/name") == name:
+    for entry in _hwmon_topology():
+        if entry["name"] == name:
+            node = entry["nodes"].get("temp1_input")
+            if node is None:
+                return None
             try:
-                return int(read_text(path + "/temp1_input")) / 1000
+                return int(read_text(node)) / 1000
             except ValueError:
-                pass
+                return None
     return None
 
 
-def fan_readings(hwmon_root=Path("/sys/class/hwmon")):
+def fan_readings(hwmon_root: Path = _HW_MON_ROOT):
     """Read the verified IT8613E fan channels; never change PWM or modes."""
-    matches = [path for path in hwmon_root.glob("hwmon*")
-               if read_text(path / "name") == "it8613"]
+    matches = [entry for entry in _hwmon_topology(hwmon_root) if entry["name"] == "it8613"]
     if len(matches) != 1:
         return None
-    path = matches[0]
+    entry = matches[0]
     values = {}
     for channel in (2, 3):
         for node in (f"fan{channel}_input", f"pwm{channel}", f"pwm{channel}_enable"):
+            path = entry["nodes"].get(node)
+            if path is None:
+                return None
             try:
-                values[node] = int(read_text(path / node))
+                values[node] = int(read_text(path))
             except ValueError:
                 return None
         if not (0 <= values[f"fan{channel}_input"] <= 20000):
@@ -129,11 +168,13 @@ def drive_temperature(by_id):
     disk = Path("/dev/disk/by-id", by_id).resolve()
     if not disk.exists():
         return None
-    device = Path("/sys/block", disk.name, "device").resolve()
-    for path in glob.glob("/sys/class/hwmon/hwmon*"):
-        if read_text(path + "/name") == "drivetemp" and Path(path, "device").resolve() == device:
+    for entry in _hwmon_topology():
+        if entry["name"] == "drivetemp" and entry["device"] == disk:
+            node = entry["nodes"].get("temp1_input")
+            if node is None:
+                return None
             try:
-                return int(read_text(path + "/temp1_input")) / 1000
+                return int(read_text(node)) / 1000
             except ValueError:
                 return None
     return None
@@ -198,18 +239,37 @@ def nvme_identity():
     return size, "NVME", read_text(Path("/sys/class/nvme", controller, "serial")) or "--"
 
 
+_VM_STATUS_TTL = 10.0
+_VM_STATUS_CACHE: dict[int, tuple[str, float]] = {}
+
+
 def vm_status(vmid):
+    now = time.monotonic()
+    cached = _VM_STATUS_CACHE.get(vmid)
+    if cached is not None and now - cached[1] < _VM_STATUS_TTL:
+        return cached[0]
     try:
         result = subprocess.run(
             ["qm", "status", str(vmid)], capture_output=True, text=True,
             timeout=4, check=True,
         )
-        return result.stdout.strip().removeprefix("status: ").upper()
+        value = result.stdout.strip().removeprefix("status: ").upper()
     except (OSError, subprocess.SubprocessError):
-        return "UNKNOWN"
+        value = "UNKNOWN"
+    _VM_STATUS_CACHE[vmid] = (value, now)
+    return value
+
+
+_NETWORK_TTL = 30.0
+_NETWORK_CACHE = {"value": None, "at": 0.0}
 
 
 def network_address():
+    global _NETWORK_CACHE
+    now = time.monotonic()
+    if _NETWORK_CACHE["value"] is not None and now - _NETWORK_CACHE["at"] < _NETWORK_TTL:
+        return _NETWORK_CACHE["value"]
+    value = "--"
     try:
         result = subprocess.run(
             ["ip", "-4", "-o", "addr", "show", "dev", "vmbr0"],
@@ -217,10 +277,13 @@ def network_address():
         )
         for part in result.stdout.split():
             if part.startswith("192.") or part.startswith("10.") or part.startswith("172."):
-                return part.split("/")[0]
+                value = part.split("/")[0]
+                break
     except (OSError, subprocess.SubprocessError):
         pass
-    return "--"
+    _NETWORK_CACHE["value"] = value
+    _NETWORK_CACHE["at"] = now
+    return value
 
 
 def snapshot():
