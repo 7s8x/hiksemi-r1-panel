@@ -59,6 +59,13 @@ _RGB_CACHE = None
 _RGB_EXPIRES = 0
 
 
+def remember_rgb_state(state):
+    """Reuse a verified write readback; None invalidates after a hardware toggle."""
+    global _RGB_CACHE, _RGB_EXPIRES
+    _RGB_CACHE = state
+    _RGB_EXPIRES = time.monotonic() + 15 if state is not None else 0
+
+
 def rgb_state_cached(force=False):
     global _RGB_CACHE, _RGB_EXPIRES
     now = time.monotonic()
@@ -603,7 +610,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         enabled = RGB.status()
                         if enabled != (rgb_action == "on"):
                             enabled = RGB.toggle()
-                        rgb_state_cached(force=True)
+                        remember_rgb_state(None)
                         if last_data is not None:
                             last_data["rgb"] = enabled
                         refresh(use_cache=True)
@@ -651,7 +658,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         if not Path("/var/lib/r1-web/rgb-verified").exists():
                             raise ValueError("color and effect modes await visual verification")
                     actual = RGB.set_state(*value)
-                    rgb_state_cached(force=True)
+                    remember_rgb_state(actual)
                     if last_data is not None:
                         last_data["rgb"] = actual[0] != 0
                     if state == "fans":

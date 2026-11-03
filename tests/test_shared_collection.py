@@ -150,6 +150,9 @@ class CollectionTests(unittest.TestCase):
             self.assertIsNone(panel.rgb_status())
             self.assertIsNone(panel.rgb_status())
             self.assertEqual(read.call_count, 3)
+            panel.remember_rgb_state((2, 1, 2, 3))
+            self.assertTrue(panel.rgb_status())
+            self.assertEqual(read.call_count, 3)
 
     def test_invalid_intervals_are_rejected(self):
         for value in (0, -1, float('nan'), True, 86401):
