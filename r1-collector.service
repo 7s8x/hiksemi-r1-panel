@@ -1,0 +1,24 @@
+[Unit]
+Description=HIKSEMI R1 shared read-only display data collector
+After=local-fs.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+RuntimeDirectory=r1-collector
+RuntimeDirectoryMode=0700
+UMask=0077
+EnvironmentFile=-/var/lib/r1-panel/collector.env
+ExecStart=/root/r1-screen/.venv/bin/python /root/r1-screen/r1_collection.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/run/r1-collector
+DevicePolicy=closed
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

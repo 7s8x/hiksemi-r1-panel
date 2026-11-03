@@ -18,7 +18,8 @@ import time
 
 from r1_fan_control_ipc import control_status, request_mode
 from r1_rgb_control import RgbControl
-from r1_panel_runtime import MAX_COMMAND, SnapshotCollector, open_control, publish_state
+from r1_panel_runtime import MAX_COMMAND, open_control, publish_state
+from r1_collection import SharedReader, read_snapshot
 from r1_storage_usage import storage_usage
 from r1_site_config import SITE, discover_bays, bay_states
 from r1_panel_metrics import MinuteMetrics
@@ -54,11 +55,29 @@ _CPU_SAMPLE = None
 # frame to tty1 showed only a cursor in the first guarded four-page trial.
 SCREEN_STATES = ("panel", "fans", "console", "off")
 RGB = RgbControl()
+_RGB_CACHE = None
+_RGB_EXPIRES = 0
+
+
+def rgb_state_cached(force=False):
+    global _RGB_CACHE, _RGB_EXPIRES
+    now = time.monotonic()
+    if force or now >= _RGB_EXPIRES:
+        _RGB_CACHE = None
+        _RGB_EXPIRES = now + 15
+        state = RGB.read_state()
+        if (len(state) != 4 or state[0] not in (0, 1, 2, 3)
+                or any(type(v) is not int or not 0 <= v <= 255 for v in state)):
+            raise RuntimeError("RGB state unavailable")
+        _RGB_CACHE = state
+    if _RGB_CACHE is None:
+        raise RuntimeError("RGB state unavailable")
+    return _RGB_CACHE
 
 
 def rgb_status():
     try:
-        return RGB.status()
+        return rgb_state_cached()[0] != 0
     except (OSError, RuntimeError, ValueError):
         return None
 
@@ -239,18 +258,8 @@ def snapshot(*, disks=None, usage=None):
 
 
 def screen_snapshot():
-    """Collect the additional display-only fields used by the accepted Web UI."""
-    disks = discover_drives()
-    capacity = storage_capacity(disks)
-    data = snapshot(disks=disks, usage=[row[2] if row is not None else None
-                                       for row in capacity])
-    data["bay_states"] = bay_states(disks)
-    data["storage_models"] = drive_models(disks)
-    data["storage_capacity"] = capacity
-    data["pve_version"], data["cpu_model"] = system_identity()
-    data["fan_basis"] = fan_temperatures(disks=disks)
-    data["vms"] = [(f"VM {vmid}", status) for vmid, status in data["vms"]]
-    return data
+    """Read the shared display snapshot without starting host queries."""
+    return read_snapshot()
 
 
 class Painter:
@@ -465,9 +474,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
     step = max(1, round(maximum * 0.05))
     touch_fd = os.open(touchscreen_path(), os.O_RDONLY | os.O_NONBLOCK)
     fb_fd = os.open("/dev/fb0", os.O_RDWR)
-    collector = SnapshotCollector(
-        screen_snapshot, observe=metrics.observe_collect if metrics else None,
-        observe_snapshot=metrics.observe_snapshot if metrics else None)
+    collector = SharedReader()
     listener = open_control()
     if metrics:
         metrics.set_page(initial_view)
@@ -496,11 +503,16 @@ def run_touch(painter, initial_view="panel", metrics=None):
 
             def refresh(use_cache=False, view=None):
                 nonlocal last_data, last_sequence
+                started_ns = time.monotonic_ns() if metrics else 0
                 data, last_sequence = collector.latest()
+                if metrics:
+                    metrics.record("collect", time.monotonic_ns() - started_ns, True)
+                    metrics.observe_snapshot(data)
                 last_data = data
                 data["clock"] = time.strftime("%H:%M")
                 if (view or state) == "fans":
                     data["control"] = control_status()
+                    data["rgb"] = rgb_status()
                 started_ns = time.monotonic_ns() if metrics else 0
                 succeeded = False
                 try:
@@ -591,6 +603,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         enabled = RGB.status()
                         if enabled != (rgb_action == "on"):
                             enabled = RGB.toggle()
+                        rgb_state_cached(force=True)
                         if last_data is not None:
                             last_data["rgb"] = enabled
                         refresh(use_cache=True)
@@ -638,6 +651,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         if not Path("/var/lib/r1-web/rgb-verified").exists():
                             raise ValueError("color and effect modes await visual verification")
                     actual = RGB.set_state(*value)
+                    rgb_state_cached(force=True)
                     if last_data is not None:
                         last_data["rgb"] = actual[0] != 0
                     if state == "fans":
@@ -646,7 +660,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                 elif action == "rgb_state":
                     if value is not None:
                         raise ValueError("invalid RGB status request")
-                    return {"ok": True, "state": state, "rgb": RGB.read_state()}
+                    return {"ok": True, "state": state, "rgb": rgb_state_cached()}
                 else:
                     raise ValueError("unknown command")
                 return {"ok": True, "state": state}
@@ -697,11 +711,6 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         _, sequence = collector.latest()
                         refresh(use_cache=delay == 1 and sequence == last_sequence)
                         next_refresh = time.monotonic() + delay
-                    elif state in ("panel", "fans"):
-                        _, sequence = collector.latest()
-                        if sequence != last_sequence:
-                            refresh()
-                            next_refresh = time.monotonic() + refresh_delay()
             finally:
                 fb_blank.write_text("0")
                 (backlight / "bl_power").write_text("0")

@@ -87,14 +87,15 @@ install -m 0600 site.example.json /var/lib/r1-panel/site.json
 ### 3. 安装 systemd 服务
 
 ```sh
-cp r1-panel.service r1-fan-curve.service r1-web.service /etc/systemd/system/
+cp r1-panel.service r1-fan-curve.service r1-web.service r1-collector.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable r1-panel.service r1-fan-curve.service r1-web.service
+systemctl enable r1-panel.service r1-fan-curve.service r1-web.service r1-collector.service
 ```
 
-三个服务的职责与依赖顺序：
+四个服务的职责与依赖顺序：
 
 - `r1-fan-curve.service` — 温控，最先启动，停止时按传感器、盘位和温度安全条件设置 120 或保留全速，不保证交回 BIOS 自动模式
+- `r1-collector.service` — 共享只读采集，温度/负载每 5 秒、VM 每 60 秒、NVMe 容量每 300 秒、可选群晖容量每 1800 秒；独立于温控
 - `r1-panel.service` — 前屏，依赖温控，启动前跑 `r1_panel_preflight.sh` 等屏幕就绪
 - `r1-web.service` — Web，依赖前两者，已做 `ProtectSystem` / `DevicePolicy` 等沙箱限制
 
@@ -113,8 +114,8 @@ systemctl enable r1-panel.service r1-fan-curve.service r1-web.service
 ### 5. 启动与验证
 
 ```sh
-systemctl start r1-fan-curve.service r1-panel.service r1-web.service
-systemctl status r1-panel.service r1-fan-curve.service r1-web.service --no-pager
+systemctl start r1-fan-curve.service r1-collector.service r1-panel.service r1-web.service
+systemctl status r1-panel.service r1-fan-curve.service r1-web.service r1-collector.service --no-pager
 ss -lnt 'sport = :8080'
 cat /run/r1-panel/state.json
 cat /run/r1-fan-curve/status.json
@@ -161,12 +162,13 @@ Web 最多 32 个活动连接，空闲或读报文超时 15 秒；HTTP/1.1 错�
 systemctl stop r1-panel.service
 
 # 2. 停其余服务（温控会按安全条件恢复基线或保留全速）
-systemctl disable --now r1-fan-curve.service r1-web.service
+systemctl disable --now r1-fan-curve.service r1-web.service r1-collector.service
 
 # 3. 删除服务定义
 rm -f /etc/systemd/system/r1-panel.service \
       /etc/systemd/system/r1-fan-curve.service \
-      /etc/systemd/system/r1-web.service
+      /etc/systemd/system/r1-web.service \
+      /etc/systemd/system/r1-collector.service
 systemctl daemon-reload
 
 # 4. 删除程序与运行时数据
