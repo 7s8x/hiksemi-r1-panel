@@ -1,0 +1,8 @@
+{
+  "node": "pve",
+  "vmids": [100, 111],
+  "stores": ["local", "local-lvm"],
+  "controller": "0000:04:00.0",
+  "bay_ports": [[1, 4], [2, 3], [3, 2], [4, 1]],
+  "occupied_bays": [1, 2, 3, 4]
+}

@@ -1,9 +1,10 @@
 [Unit]
-Description=HIKSEMI R1 local HTTPS panel management
+Description=HIKSEMI R1 local HTTP panel management (optional TLS)
 After=network-online.target r1-panel.service r1-fan-curve.service
 Wants=network-online.target
 
 [Service]
+EnvironmentFile=-/var/lib/r1-web/web.env
 Type=simple
 StateDirectory=r1-web
 StateDirectoryMode=0700

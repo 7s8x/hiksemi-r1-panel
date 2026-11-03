@@ -8,11 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-try:
-    # Local workspace keeps the sanitized export alongside the live-machine copy.
-    from r1_panel_repository import TouchGesture, fan_button_mode, fan_readings, rgb_button_action, shifted_state  # noqa: E402
-except ModuleNotFoundError:
-    from r1_panel_buttons import TouchGesture, fan_button_mode, fan_readings, shifted_state  # noqa: E402
+from r1_panel_repository import TouchGesture, fan_button_mode, fan_readings, rgb_button_action, shifted_state  # noqa: E402
 
 
 def event(kind, code, value):

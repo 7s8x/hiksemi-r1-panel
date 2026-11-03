@@ -7,11 +7,12 @@ host stores when the Web service cannot access the LVM control device.
 
 from __future__ import annotations
 
+from r1_site_config import SITE
 import json
 import re
 import time
 
-from r1_storage_usage import _config, _guest_ssh_command, _host_sata, _map_guest_to_bays, _run
+from r1_storage_usage import _config, _guest_ssh_command, _host_sata, _map_guest_to_bays, _run, disk_generation
 
 
 REFRESH_SECONDS = 60
@@ -22,8 +23,8 @@ _cached_capacity = None
 
 def _nvme_capacity():
     total = used = available = 0
-    for name in ("local", "local-lvm"):
-        output = _run(["pvesh", "get", f"/nodes/pve/storage/{name}/status",
+    for name in SITE.stores:
+        output = _run(["pvesh", "get", f"/nodes/{SITE.node}/storage/{name}/status",
                        "--output-format", "json"], 4)
         try:
             record = json.loads(output)
@@ -31,7 +32,7 @@ def _nvme_capacity():
             if size <= 0 or not 0 <= occupied <= size or not 0 <= free <= size:
                 raise ValueError("invalid storage status")
         except (ValueError, TypeError, KeyError):
-            output = _run(["pvesh", "get", f"/nodes/pve/storage/{name}/rrddata",
+            output = _run(["pvesh", "get", f"/nodes/{SITE.node}/storage/{name}/rrddata",
                            "--timeframe", "hour", "--cf", "AVERAGE",
                            "--output-format", "json"], 4)
             try:
@@ -72,8 +73,9 @@ def storage_capacity(disks):
     """NVMe then physical bays; each entry is (used bytes, free bytes, percent)."""
     global _cached_at, _cached_disks, _cached_capacity
     disks = tuple(disks)
+    generation = disk_generation(disks)
     now = time.monotonic()
-    if disks == _cached_disks and _cached_capacity is not None and now - _cached_at < REFRESH_SECONDS:
+    if generation is not None and generation == _cached_disks and _cached_capacity is not None and now - _cached_at < REFRESH_SECONDS:
         return list(_cached_capacity)
     nvme = _nvme_capacity()
     result = [nvme]
@@ -82,5 +84,5 @@ def storage_capacity(disks):
     if config:
         guest = _guest_capacity(config)
         result[1:] = _map_guest_to_bays(disks, _host_sata(config), guest)
-    _cached_at, _cached_disks, _cached_capacity = now, disks, tuple(result)
+    _cached_at, _cached_disks, _cached_capacity = now, generation, tuple(result)
     return list(result)

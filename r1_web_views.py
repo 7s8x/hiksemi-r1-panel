@@ -7,12 +7,18 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import threading
+import time
 from xml.sax.saxutils import escape
 
 from r1_theme import theme_svg
+from r1_site_config import SITE
 
 
 ROOT = Path(__file__).resolve().parent
+_identity_lock = threading.Lock()
+_identity_cache = None
+_identity_expires = 0.0
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
@@ -25,25 +31,18 @@ def _template(name: str, values: dict[str, object]) -> bytes:
 
 
 def system_identity() -> tuple[str, str]:
-    """Return short, non-secret host labels for the public Web headers."""
-    try:
-        result = subprocess.run(["pveversion"], capture_output=True, text=True,
-                                check=True, timeout=3)
-        version = re.search(r"pve-manager/([0-9]+(?:\.[0-9]+){1,2})", result.stdout)
-    except (OSError, subprocess.SubprocessError):
-        version = None
-    pve = "PROXMOX VE " + (version.group(1) if version else "--")
-    try:
-        cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8")
-    except OSError:
-        cpuinfo = ""
-    model = re.search(r"^model name\s*:\s*(.+)$", cpuinfo, re.MULTILINE)
-    cores = re.search(r"^cpu cores\s*:\s*([0-9]+)$", cpuinfo, re.MULTILINE)
-    label = re.sub(r"\s+", " ", re.sub(r"\((?:R|TM)\)", "", model.group(1))).strip() if model else "CPU"
-    label = label[:18].rstrip()
-    threads = os.cpu_count()
-    detail = f" · {cores.group(1)}C / {threads}T" if cores and threads else ""
-    return pve, label + detail
+    """Cache stable host labels for five minutes; retry failures next sample."""
+    global _identity_cache, _identity_expires
+    with _identity_lock:
+        if _identity_cache is not None and time.monotonic() < _identity_expires:
+            return _identity_cache
+        value = _read_system_identity()
+        if "--" not in value[0]:
+            _identity_cache = value
+            _identity_expires = time.monotonic() + 300
+        else:
+            _identity_cache = None
+        return value
 
 
 def drive_models(disks: tuple) -> list[str]:
@@ -102,7 +101,7 @@ def _free_amount(size_bytes: int) -> str:
     return f"{size_bytes / 1_000_000_000_000:.2f}TB" if size_bytes >= 1_000_000_000_000 else f"{size_bytes / 1_000_000_000:.0f}GB"
 
 
-def render_information(data: dict, *, web_layout: bool = True) -> bytes:
+def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
     """Render the shared current layout; web_layout remains a compatibility keyword."""
     values = _shared(data)
     usage = _number(data.get("cpu_usage"))
@@ -116,6 +115,7 @@ def render_information(data: dict, *, web_layout: bool = True) -> bytes:
                   MEM_USED=f"{used:.1f}" if used is not None else "--",
                   MEM_TOTAL=f"{total:.0f}" if total is not None else "--",
                   DRIVE_COUNT=5)
+    states = list(data.get("bay_states") or [])
     storage = list(data.get("storage") or [])
     models = list(data.get("storage_models") or [])
     percents = list(data.get("storage_usage") or [])
@@ -127,6 +127,8 @@ def render_information(data: dict, *, web_layout: bool = True) -> bytes:
         known = kind != "UNVERIFIED" and size != "--"
         title = (f"NVMe · {size}" if index == 0 else
                  f"BAY {index} · {size} {kind}" if known else f"BAY {index} · 待核实")
+        if index and index - 1 < len(states) and states[index - 1] == "empty":
+            title = f"BAY {index} · 空盘位"
         percent = _number(percents[index]) if index < len(percents) else None
         percent = round(percent) if percent is not None and known else None
         record = capacities[index] if index < len(capacities) else None
@@ -163,10 +165,10 @@ def render_information(data: dict, *, web_layout: bool = True) -> bytes:
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
         values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
     template = "r1_web_information_web.svg"
-    return theme_svg(_template(template, values))
+    return theme_svg(_template(template, values), theme)
 
 
-def render_fans(data: dict, *, web_layout: bool = True) -> bytes:
+def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
     """Render the shared current layout; web_layout remains a compatibility keyword."""
     values = _shared(data)
     fans = data.get("fans") or {}
@@ -233,7 +235,7 @@ def render_fans(data: dict, *, web_layout: bool = True) -> bytes:
     if not isinstance(basis, (tuple, list)) or len(basis) != 3:
         basis = (None, None, 0)
     cpu_temp, cpu_unit = _temperature(basis[0])
-    drive_temp, drive_unit = _temperature(basis[1] if basis[2] == 4 else None)
+    drive_temp, drive_unit = _temperature(basis[1] if basis[2] == len(SITE.occupied_bays) else None)
     values.update(BASIS_CPU_TEMP=cpu_temp + cpu_unit,
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
@@ -243,4 +245,26 @@ def render_fans(data: dict, *, web_layout: bool = True) -> bytes:
         values["CONTROL_STATUS"] = (f"全速运行 · 剩余 {remaining} 秒"
                                     if remaining is not None else "全速运行")
     template = "r1_web_fans_web.svg"
-    return theme_svg(_template(template, values))
+    return theme_svg(_template(template, values), theme)
+
+
+def _read_system_identity() -> tuple[str, str]:
+    """Return short, non-secret host labels for the public Web headers."""
+    try:
+        result = subprocess.run(["pveversion"], capture_output=True, text=True,
+                                check=True, timeout=3)
+        version = re.search(r"pve-manager/([0-9]+(?:\.[0-9]+){1,2})", result.stdout)
+    except (OSError, subprocess.SubprocessError):
+        version = None
+    pve = "PROXMOX VE " + (version.group(1) if version else "--")
+    try:
+        cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        cpuinfo = ""
+    model = re.search(r"^model name\s*:\s*(.+)$", cpuinfo, re.MULTILINE)
+    cores = re.search(r"^cpu cores\s*:\s*([0-9]+)$", cpuinfo, re.MULTILINE)
+    label = re.sub(r"\s+", " ", re.sub(r"\((?:R|TM)\)", "", model.group(1))).strip() if model else "CPU"
+    label = label[:18].rstrip()
+    threads = os.cpu_count()
+    detail = f" · {cores.group(1)}C / {threads}T" if cores and threads else ""
+    return pve, label + detail

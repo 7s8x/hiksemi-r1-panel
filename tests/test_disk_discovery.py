@@ -54,7 +54,7 @@ class DiskDiscoveryTests(unittest.TestCase):
               patch("r1_panel_repository.temp_for_hwmon", return_value=42),
               patch("r1_panel_repository.nvme_identity", return_value=("1TB", "NVME", "NVME")),
               patch("r1_panel_repository.cpu_usage", return_value=20),
-              patch("r1_panel_repository.vm_status", return_value="RUNNING"),
+              patch("r1_panel_repository.vm_statuses", return_value={100: "RUNNING", 111: "RUNNING"}),
               patch("r1_panel_repository.network_address", return_value="--"),
               patch("r1_panel_repository.fan_readings", return_value=None),
               patch("r1_panel_repository.control_status", return_value=None),

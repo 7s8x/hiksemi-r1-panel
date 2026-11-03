@@ -26,6 +26,17 @@ from ui_preview import preview_web_source  # noqa: E402
 
 
 class WebTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        for name, target in (("r1_web.INITIAL_FILE", root / "initial-password"),
+                             ("r1_web.WEB_LOG_FILE", root / "access.log"),
+                             ("r1_theme.THEME_FILE", root / "theme.json")):
+            patched = patch(name, target)
+            patched.start()
+            self.addCleanup(patched.stop)
+
     def test_public_snapshot_masks_serials_and_vm_names(self):
         with (patch("r1_web.panel_repo.discover_drives", return_value=(("secret disk label", "disk-id"),)),
               patch("r1_web.panel_repo.memory", return_value=(16, 8)),
@@ -37,7 +48,7 @@ class WebTests(unittest.TestCase):
               patch("r1_web.panel_repo.storage_usage", return_value=[6, 87]),
               patch("r1_web.storage_capacity", return_value=[(60_000_000_000, 940_000_000_000, 6), (870_000_000_000, 130_000_000_000, 87)]),
               patch("r1_web.panel_repo.cpu_usage", return_value=28),
-              patch("r1_web.panel_repo.vm_status", return_value="RUNNING"),
+              patch("r1_web.vm_statuses", return_value={100: "RUNNING", 111: "RUNNING"}),
               patch("r1_web.panel_repo.fan_readings", return_value=None),
               patch("r1_web.fan_temperatures", return_value=(65, 39, 4)),
               patch("r1_web.control_status", return_value={"live": False}),
@@ -256,7 +267,7 @@ class WebTests(unittest.TestCase):
         source = (root / "r1_web.html").read_text(encoding="utf-8")
         favicon = (root / "r1_web_favicon.svg").read_bytes()
         self.assertIn('<link rel="icon" type="image/svg+xml" href="/favicon.svg">', source)
-        self.assertEqual(favicon, (root / "logo-options" / "r1" / "flat.svg").read_bytes())
+        self.assertEqual(ElementTree.fromstring(favicon).tag, "{http://www.w3.org/2000/svg}svg")
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever,

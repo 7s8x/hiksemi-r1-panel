@@ -19,7 +19,7 @@ R1 上的管理服务由 `r1-web.service` 提供，源码入口是 `r1_web.py`�
 - 默认 **HTTP**，端口 `8080`，绑定 `0.0.0.0`（监听所有网卡），因此任意内网段都能直接输 IP 访问，无需预先知道网段。
 - 需要 HTTPS 时二选一：
   - 直接 `r1_web.py serve --tls`（启用 `init` 生成的自签证书）；
-  - 更推荐在前面挂反代（nginx/caddy）做 TLS，由你自行决定如何暴露到公网，同时保留 HTTP 内网直连。
+  - 更推荐在前面挂反代（nginx/caddy）做 TLS，仅在自行审核网络入口与认证后使用；不要直接开放原始 HTTP 管理端口。
 - 反代场景：默认忽略客户端的 `X-Forwarded-Proto` / `X-Forwarded-Host`。仅在 `R1_WEB_TRUSTED_PROXIES` 显式配置可信代理来源 CIDR 后，才使用这些头设置 cookie 和校验同源，例如同机反代配置 `R1_WEB_TRUSTED_PROXIES=127.0.0.1/32`。代理必须覆盖客户端传入的转发头。
 - 来源白名单默认放行回环 + 全部 RFC1918 私网 + CGNAT；如需收紧，设置环境变量 `R1_WEB_ALLOWED`（逗号分隔 CIDR，如 `192.168.1.0/24,10.0.0.0/8`）。
 - 若使用 `--tls` 自签证书，首次访问需手动信任。建议先核对指纹：
@@ -58,6 +58,8 @@ R1_WEB_LOG=0 r1_web.py serve
 | `r1_web_fans_web.svg` | 风扇页 |
 
 `PanelRenderer.draw()` 与 Web 端都调用 `render_information()` / `render_fans()`，两个函数固定加载上面两份模板，所以两处画面一致。`web_layout` 关键字参数为兼容保留，现在传与不传结果相同。
+
+更多部署及有效性规则见 [分发说明](distribution.md)。
 
 早期另有一套 `r1_web_information.svg` / `r1_web_fans.svg`（虚拟机是底部独立的「虚拟机状态」卡片、第一张卡标题为「处理器」），生产路径早已不用，已从仓库移除。旧版本的校验清单 `SHA256SUMS-v1.3.1.txt` 里仍会提到这两个文件名，那是 v1.3.1 的历史快照。
 
@@ -112,3 +114,9 @@ cat /run/r1-fan-curve/status.json
 - 不要把 `/var/lib/r1-web/` 下的 `admin.json`、`server.key`、`initial-password` 提交到仓库或截图外发
 - `http://127.0.0.1:8766/` 是本机模拟预览，不是生产 Web 的 HTTP 副本，详见 [ui-preview.md](ui-preview.md)
 
+
+## 本候选的部署配置
+
+HTTP 初始化不需要 openssl；TLS 证书用 `init --tls --tls-name <实际名称>` 显式生成。Web 环境变量可写入 `/var/lib/r1-web/web.env`，由 systemd 单元读取。域名访问配置 `R1_WEB_HOSTS`；反向代理还要配置 `R1_WEB_TRUSTED_PROXIES`，默认不信任转发头。`R1_WEB_PUBLIC=0` 关闭匿名双页图，登录后仍可用。详见主 README。
+
+最多 32 个活动连接（含 TLS 握手），15 秒空闲/读超时。畸形 Content-Length、Transfer-Encoding、未消费正文和错误响应不复用连接。改密后清理初始密码文件，清理失败单独记录，不把已生效的改密误报为失败。

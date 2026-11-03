@@ -31,7 +31,7 @@ class WebConfigReviewTests(unittest.TestCase):
             self.assertIn("Secure", h._session_cookie("example"))
 
     def test_http_still_requires_initialized_admin_before_binding(self):
-        with TemporaryDirectory() as directory, patch.object(web, "ADMIN_FILE", Path(directory) / "missing"), patch.object(web, "ThreadingHTTPServer") as server, patch.object(web, "SnapshotCollector"), patch("sys.argv", ["r1_web.py", "serve"]):
+        with TemporaryDirectory() as directory, patch.object(web, "ADMIN_FILE", Path(directory) / "missing"), patch.object(web, "BoundedHTTPServer") as server, patch.object(web, "SnapshotCollector"), patch("sys.argv", ["r1_web.py", "serve"]):
             with self.assertRaises(RuntimeError):
                 web.main()
             server.assert_not_called()
@@ -41,7 +41,7 @@ class WebConfigReviewTests(unittest.TestCase):
             root = Path(directory)
             admin, cert, key = [root / name for name in ("admin", "custom.crt", "custom.key")]
             for p in (admin, cert, key): p.write_text("test fixture only")
-            with patch.object(web, "ADMIN_FILE", admin), patch.object(web, "CERT_FILE", root / "missing.crt"), patch.object(web, "KEY_FILE", root / "missing.key"), patch.object(web.ssl, "SSLContext") as context, patch.object(web, "ThreadingHTTPServer") as server, patch.object(web, "SnapshotCollector"), patch("sys.argv", ["r1_web.py", "serve", "--tls", "--cert", str(cert), "--key", str(key)]):
+            with patch.object(web, "ADMIN_FILE", admin), patch.object(web, "CERT_FILE", root / "missing.crt"), patch.object(web, "KEY_FILE", root / "missing.key"), patch.object(web.ssl, "SSLContext") as context, patch.object(web, "BoundedHTTPServer") as server, patch.object(web, "SnapshotCollector"), patch("sys.argv", ["r1_web.py", "serve", "--tls", "--cert", str(cert), "--key", str(key)]):
                 web.main()
                 context.return_value.load_cert_chain.assert_called_once_with(str(cert), str(key))
                 server.return_value.server_close.assert_called_once()

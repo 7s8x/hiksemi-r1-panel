@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -190,14 +191,40 @@ def _text(lib, ctx, element):
     lib.cairo_restore(ctx)
 
 
+def validate_svg(svg: bytes):
+    """Reject silently ignored layout features before a template reaches hardware."""
+    root = ET.fromstring(svg)
+    if root.tag.rsplit("}", 1)[-1] != "svg" or root.get("width") != "376" or root.get("height") != "960":
+        raise ValueError("unexpected front-panel SVG dimensions")
+    allowed = {
+        "svg": {"width", "height", "viewBox"}, "g": {"font-family"},
+        "rect": {"x", "y", "width", "height", "rx", "fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity"},
+        "line": {"x1", "y1", "x2", "y2", "stroke", "stroke-width", "stroke-opacity"},
+        "circle": {"cx", "cy", "r", "fill", "fill-opacity", "stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-dasharray", "transform"},
+        "text": {"x", "y", "fill", "font-size", "font-weight", "text-anchor", "dominant-baseline"},
+        "tspan": {"fill", "font-size"},
+    }
+    for element in root.iter():
+        name = element.tag.rsplit("}", 1)[-1]
+        if name not in allowed or set(element.attrib) - allowed[name]:
+            raise ValueError(f"unsupported SVG element or attribute: {name}")
+        if name == "svg" and element is not root:
+            raise ValueError("nested SVG is not supported by the panel renderer")
+        if "transform" in element.attrib and not re.fullmatch(r"rotate\(-90 [0-9.]+ [0-9.]+\)", element.get("transform")):
+            raise ValueError("unsupported SVG transform")
+        if "transform" in element.attrib:
+            _, x, y = element.get("transform")[:-1].split()
+            if float(x) != float(element.get("cx", 0)) or float(y) != float(element.get("cy", 0)):
+                raise ValueError("ring rotation must use its own center")
+    return root
+
+
 def paint_svg(painter, svg: bytes):
     """Paint a rendered, trusted Web template into an existing Cairo surface."""
+    root = validate_svg(svg)
     _load_font()
     lib, ctx = painter.lib, painter.ctx
     _setup(lib)
-    root = ET.fromstring(svg)
-    if root.get("width") != "376" or root.get("height") != "960":
-        raise ValueError("unexpected front-panel SVG dimensions")
     methods = {"rect": _rect, "circle": _circle, "line": _line, "text": _text}
     for element in root.iter():
         name = element.tag.rsplit("}", 1)[-1]

@@ -14,9 +14,10 @@ import time
 from r1_hardware import FanCurve, FanPoint
 from r1_fan_control_ipc import publish_status, requested_mode
 from r1_fan_config import CONFIG_FILE, DEFAULT, curves, digest, load
+from r1_site_config import SITE, discover_bays, bay_states
 
 BASELINE_PWM = 120
-EXPECTED_DRIVES = 4
+EXPECTED_DRIVES = len(SITE.occupied_bays)
 CPU_CURVE, DRIVE_CURVE = curves(DEFAULT)
 CPU_ASSIST = FanCurve(tuple(FanPoint(t, p) for t, p in ((80, 120), (85, 160), (90, 220), (95, 255))))
 STOP = False
@@ -62,19 +63,48 @@ class Reading:
     mode3: int
 
 
-def temperatures(root: Path = Path("/sys/class/hwmon")) -> tuple[float | None, float | None, int]:
+def temperatures(root: Path = Path("/sys/class/hwmon"), *,
+                 block_root=Path("/sys/block"), by_id_root=Path("/dev/disk/by-id"),
+                 by_path_root=Path("/dev/disk/by-path"), site=SITE,
+                 disks=None) -> tuple[float | None, float | None, int]:
     try:
         cpu = single_hwmon("coretemp", root)
         cpu_values = [read_int(path) / 1000 for path in cpu.glob("temp*_input")]
-        drives = named_hwmon("drivetemp", root)
-        drive_values = [read_int(path / "temp1_input") / 1000 for path in drives]
-        if not cpu_values or not drive_values:
-            return None, None, len(drives)
+        if not cpu_values:
+            return None, None, 0
         if any(not 0 <= value <= 105 for value in cpu_values):
-            return None, None, len(drives)
+            return None, None, 0
+        cpu_c = max(cpu_values)
+        disks = discover_bays(block_root, by_id_root, by_path_root, site=site) if disks is None else disks
+        states = bay_states(disks, site=site)
+        if any(state in ("missing", "unexpected") for state in states):
+            return cpu_c, None, -1
+        devices = {}
+        for path in named_hwmon("drivetemp", root):
+            try:
+                device = (path / "device").resolve(strict=True)
+                devices.setdefault(device, []).append(path)
+            except (OSError, RuntimeError):
+                continue
+        drive_values = []
+        for (_, disk), state in zip(disks, states):
+            if state == "empty":
+                continue
+            try:
+                block = (by_id_root / disk).resolve(strict=True)
+                device = (block_root / block.name / "device").resolve(strict=True)
+                matches = devices.get(device, [])
+                if len(matches) != 1:
+                    return cpu_c, None, -1
+                drive_values.append(read_int(matches[0] / "temp1_input") / 1000)
+            except (OSError, ValueError, RuntimeError):
+                return cpu_c, None, -1
         if any(not 0 <= value <= 80 for value in drive_values):
-            return None, None, len(drives)
-        return max(cpu_values), max(drive_values), len(drives)
+            return cpu_c, None, -1
+        # A sensor with no verified bay is also a topology mismatch.
+        if sum(len(paths) for paths in devices.values()) != len(drive_values):
+            return cpu_c, None, -1
+        return cpu_c, max(drive_values) if drive_values else None, len(drive_values)
     except (OSError, ValueError, RuntimeError):
         return None, None, 0
 
@@ -92,12 +122,12 @@ def sample(chip: Path, root: Path = Path("/sys/class/hwmon")) -> Reading:
 def target_pwms(reading: Reading, expected_drives: int,
                 active_curves: tuple[FanCurve, FanCurve] | None = None) -> tuple[int, int]:
     """Return (FAN2 chassis, FAN3 CPU), retaining global fail-high protection."""
-    if (reading.cpu_c is None or reading.drive_c is None
-            or reading.drive_count < expected_drives
+    if (reading.cpu_c is None or (expected_drives > 0 and reading.drive_c is None)
+            or reading.drive_count != expected_drives
             or reading.fan2 <= 0 or reading.fan3 <= 0):
         return 255, 255
     cpu_curve, drive_curve = active_curves or (CPU_CURVE, DRIVE_CURVE)
-    chassis = max(BASELINE_PWM, drive_curve.pwm_at(reading.drive_c),
+    chassis = max(BASELINE_PWM, drive_curve.pwm_at(reading.drive_c) if expected_drives else BASELINE_PWM,
                   CPU_ASSIST.pwm_at(reading.cpu_c))
     cpu = max(BASELINE_PWM, cpu_curve.pwm_at(reading.cpu_c))
     return chassis, cpu
@@ -152,9 +182,9 @@ def restore(chip: Path) -> None:
         fans_running = read_int(chip / "fan2_input") > 0 and read_int(chip / "fan3_input") > 0
     except (OSError, ValueError):
         fans_running = False
-    safe_to_restore = (fans_running and drive_count >= EXPECTED_DRIVES
-                       and cpu is not None and drive is not None
-                       and cpu < 80 and drive < 50)
+    safe_to_restore = (fans_running and drive_count == EXPECTED_DRIVES
+                       and cpu is not None and cpu < 80
+                       and (EXPECTED_DRIVES == 0 or (drive is not None and drive < 50)))
     value = BASELINE_PWM if safe_to_restore else 255
     set_both(chip, value)
     print(f"restored={value} cpu={cpu} drive={drive}", flush=True)

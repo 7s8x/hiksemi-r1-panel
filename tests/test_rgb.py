@@ -9,10 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from r1_rgb_trial import BASELINE, run_trial, set_state, write_byte_data  # noqa: E402
 from r1_rgb_control import RgbControl, rgb_bus_path  # noqa: E402
-try:
-    from r1_panel_repository import rgb_button_action  # noqa: E402
-except ModuleNotFoundError:
-    from r1_panel_buttons import rgb_button_action  # noqa: E402
+from r1_panel_repository import rgb_button_action  # noqa: E402
 
 
 class RgbTrialTests(unittest.TestCase):

@@ -8,6 +8,7 @@ from pathlib import Path
 import socket
 import threading
 import time
+from r1_site_config import SITE
 
 
 CONTROL_SOCKET = Path("/run/r1-panel/control.sock")
@@ -18,18 +19,22 @@ MAX_COMMAND = 512
 def empty_snapshot() -> dict:
     return {"cpu": None, "nvme": None, "drives": [], "mem_total": 0,
             "mem_used": 0, "uptime": 0, "ip": "--",
-            "vms": [(100, "UNKNOWN"), (111, "UNKNOWN")], "fans": None,
+            "vms": [(vmid, "UNKNOWN") for vmid in SITE.vmids], "fans": None,
             "control": {}, "rgb": None, "captured_at": 0,
             "clock": time.strftime("%H:%M")}
 
 
 class SnapshotCollector:
-    def __init__(self, collect, interval: float = 15.0):
+    def __init__(self, collect, interval: float = 15.0, observe=None, observe_snapshot=None):
+        self.observe = observe
+        self.observe_snapshot = observe_snapshot
         self.collect = collect
         self.interval = interval
         self._lock = threading.Lock()
         self._data = None
         self._sequence = 0
+        self._sample_at = None
+        self._failed = False
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="r1-panel-collector", daemon=True)
 
@@ -42,19 +47,39 @@ class SnapshotCollector:
 
     def latest(self):
         with self._lock:
-            return (dict(self._data) if self._data is not None else empty_snapshot(),
-                    self._sequence)
+            age = None if self._sample_at is None else max(0, time.monotonic() - self._sample_at)
+            invalid = self._failed or age is None or age > self.interval * 2
+            result = empty_snapshot() if invalid else dict(self._data)
+            result["freshness"] = {"age_seconds": age, "valid": not invalid,
+                                   "reason": "collection_failed" if self._failed else "expired" if invalid else "fresh"}
+            return result, self._sequence
 
     def _run(self):
         while not self._stop.is_set():
             started = time.monotonic()
+            started_ns = time.monotonic_ns()
+            succeeded = False
             try:
                 data = self.collect()
                 with self._lock:
                     self._data = data
+                    self._sample_at = time.monotonic()
+                    self._failed = False
                     self._sequence += 1
+                succeeded = True
+                if self.observe_snapshot is not None:
+                    try:
+                        self.observe_snapshot(data)
+                    except Exception:
+                        print("snapshot_metrics_error=observation_failed", flush=True)
             except Exception as error:
-                print(f"snapshot_error={error}", flush=True)
+                with self._lock:
+                    self._failed = True
+                    self._sequence += 1
+                print("snapshot_error=collection_failed", flush=True)
+            finally:
+                if self.observe is not None:
+                    self.observe(time.monotonic_ns() - started_ns, succeeded)
             self._stop.wait(max(0, self.interval - (time.monotonic() - started)))
 
 

@@ -6,6 +6,7 @@ Missing or ambiguous mappings remain unknown rather than showing a wrong bay.
 """
 
 import ipaddress
+from r1_site_config import SITE
 import json
 from pathlib import Path
 import re
@@ -18,6 +19,24 @@ REFRESH_SECONDS = 60
 _cached_at = 0.0
 _cached_disks = None
 _cached_usage = None
+
+
+def disk_generation(disks, by_id_root=Path("/dev/disk/by-id"), block_root=Path("/sys/block")):
+    """A reused /dev/sdX name must not reuse the previous disk's cached capacity."""
+    values = []
+    for label, disk in disks:
+        if disk is None:
+            values.append((label, None, None))
+            continue
+        try:
+            target = (by_id_root / disk).resolve(strict=True)
+            sequence = (block_root / target.name / "diskseq").read_text().strip()
+            if not sequence.isdecimal():
+                return None
+        except (OSError, RuntimeError):
+            return None
+        values.append((label, disk, sequence))
+    return tuple(values)
 
 
 def _run(args, timeout):
@@ -36,7 +55,7 @@ def _nvme_usage():
     seen = set()
     for line in output.splitlines():
         fields = line.split()
-        if len(fields) < 5 or fields[0] not in ("local", "local-lvm"):
+        if len(fields) < 5 or fields[0] not in SITE.stores:
             continue
         try:
             capacity, occupied = int(fields[3]), int(fields[4])
@@ -47,12 +66,12 @@ def _nvme_usage():
         seen.add(fields[0])
         total += capacity
         used += occupied
-    if seen != {"local", "local-lvm"} or total <= 0:
+    if seen != set(SITE.stores) or total <= 0:
         # The Web service cannot open /dev/mapper/control. PVE's own recent
         # storage history remains readable without widening its device access.
         total = used = 0
-        for name in ("local", "local-lvm"):
-            output = _run(["pvesh", "get", f"/nodes/pve/storage/{name}/rrddata",
+        for name in SITE.stores:
+            output = _run(["pvesh", "get", f"/nodes/{SITE.node}/storage/{name}/rrddata",
                            "--timeframe", "hour", "--cf", "AVERAGE",
                            "--output-format", "json"], 4)
             try:
@@ -159,8 +178,9 @@ def storage_usage(disks):
     """Return NVMe and four bay percentages, or None where not verified."""
     global _cached_at, _cached_disks, _cached_usage
     disks = tuple(disks)
+    generation = disk_generation(disks)
     now = time.monotonic()
-    if disks == _cached_disks and _cached_usage is not None and now - _cached_at < REFRESH_SECONDS:
+    if generation is not None and generation == _cached_disks and _cached_usage is not None and now - _cached_at < REFRESH_SECONDS:
         return list(_cached_usage)
     usage = [_nvme_usage()] + [None] * len(disks)
     config = _config()
@@ -168,5 +188,5 @@ def storage_usage(disks):
         guest = _guest_usage(config)
         host_slots = _host_sata(config)
         usage[1:] = _map_guest_to_bays(disks, host_slots, guest)
-    _cached_at, _cached_disks, _cached_usage = now, disks, tuple(usage)
+    _cached_at, _cached_disks, _cached_usage = now, generation, tuple(usage)
     return usage

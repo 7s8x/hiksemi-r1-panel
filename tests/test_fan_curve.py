@@ -16,6 +16,19 @@ def reading(cpu=62, drive=40, drives=4, fan2=995, fan3=2860):
 
 
 class FanCurveTests(unittest.TestCase):
+    def setUp(self):
+        # Unit tests must never publish to an actual controller or consume its mode file.
+        for name, value in (("publish_status", None), ("requested_mode", "auto")):
+            patched = patch("r1_fan_curve." + name, return_value=value)
+            patched.start()
+            self.addCleanup(patched.stop)
+        from tempfile import TemporaryDirectory
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        config = patch("r1_fan_curve.CONFIG_FILE", Path(temporary.name) / "absent-curves.json")
+        config.start()
+        self.addCleanup(config.stop)
+
     def test_normal_temperature_keeps_baseline(self):
         self.assertEqual(target_pwm(reading(), 4), 120)
 

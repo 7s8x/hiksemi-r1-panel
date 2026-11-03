@@ -20,6 +20,10 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_rgb_control import RgbControl
 from r1_panel_runtime import MAX_COMMAND, SnapshotCollector, open_control, publish_state
 from r1_storage_usage import storage_usage
+from r1_site_config import SITE, discover_bays, bay_states
+from r1_panel_metrics import MinuteMetrics
+from r1_framebuffer import write_frame
+from r1_vm_status import vm_statuses
 from r1_web_capacity import storage_capacity
 from r1_web_views import drive_models, render_fans, render_information, system_identity
 from r1_fan_curve import temperatures as fan_temperatures
@@ -28,36 +32,13 @@ from r1_svg_painter import paint_svg
 
 WIDTH = 376
 HEIGHT = 960
-BAY_PORTS = ((1, 4), (2, 3), (3, 2), (4, 1))
-BAY_CONTROLLER = "0000:04:00.0"
+BAY_PORTS = SITE.bay_ports
+BAY_CONTROLLER = SITE.controller
 
 
 def discover_drives(block_root=Path("/sys/block"), by_id_root=Path("/dev/disk/by-id"),
                     by_path_root=Path("/dev/disk/by-path")):
-    """Return all four R1 bays in physical order; an absent path is unverified."""
-    stable_ids = {}
-    for link in sorted(by_id_root.glob("ata-*")):
-        if "-part" in link.name or not link.is_symlink():
-            continue
-        try:
-            stable_ids.setdefault(link.resolve(strict=True).name, link.name)
-        except (OSError, RuntimeError):
-            continue
-    found = []
-    for bay, port in BAY_PORTS:
-        link = by_path_root / f"pci-{BAY_CONTROLLER}-ata-{port}.0"
-        disk = None
-        try:
-            name = link.resolve(strict=True).name
-            block = block_root / name
-            device = (block / "device").resolve(strict=True)
-            if (name.startswith("sd") and block.is_dir() and
-                    BAY_CONTROLLER in device.parts and f"ata{port}" in device.parts):
-                disk = stable_ids.get(name, f"/dev/{name}")
-        except (OSError, RuntimeError):
-            pass
-        found.append((f"BAY {bay}", disk))
-    return tuple(found)
+    return discover_bays(block_root, by_id_root, by_path_root)
 
 
 def bay_identity(label, disk):
@@ -223,10 +204,11 @@ def network_address():
     return "--"
 
 
-def snapshot():
+def snapshot(*, disks=None, usage=None):
     total, used = memory()
-    disks = discover_drives()
-    usage = storage_usage(disks)
+    disks = discover_drives() if disks is None else disks
+    usage = storage_usage(disks) if usage is None else usage
+    vms = vm_statuses()
     disk_readings = [(label, bay_identity(label, disk),
                       drive_temperature(disk) if disk is not None else None)
                      for label, disk in disks]
@@ -247,7 +229,7 @@ def snapshot():
         "mem_used": used,
         "uptime": uptime,
         "ip": network_address(),
-        "vms": [(100, vm_status(100)), (111, vm_status(111))],
+        "vms": list(vms.items()),
         "fans": fan_readings(),
         "control": control_status(),
         "rgb": rgb_status(),
@@ -258,12 +240,15 @@ def snapshot():
 
 def screen_snapshot():
     """Collect the additional display-only fields used by the accepted Web UI."""
-    data = snapshot()
     disks = discover_drives()
+    capacity = storage_capacity(disks)
+    data = snapshot(disks=disks, usage=[row[2] if row is not None else None
+                                       for row in capacity])
+    data["bay_states"] = bay_states(disks)
     data["storage_models"] = drive_models(disks)
-    data["storage_capacity"] = storage_capacity(disks)
+    data["storage_capacity"] = capacity
     data["pve_version"], data["cpu_model"] = system_identity()
-    data["fan_basis"] = fan_temperatures()
+    data["fan_basis"] = fan_temperatures(disks=disks)
     data["vms"] = [(f"VM {vmid}", status) for vmid, status in data["vms"]]
     return data
 
@@ -468,7 +453,7 @@ def rgb_button_action(point):
     return None
 
 
-def run_touch(painter, initial_view="panel"):
+def run_touch(painter, initial_view="panel", metrics=None):
     backlight = Path("/sys/class/backlight/intel_backlight")
     fb_blank = Path("/sys/class/graphics/fb0/blank")
     maximum = int(read_text(backlight / "max_brightness"))
@@ -480,8 +465,13 @@ def run_touch(painter, initial_view="panel"):
     step = max(1, round(maximum * 0.05))
     touch_fd = os.open(touchscreen_path(), os.O_RDONLY | os.O_NONBLOCK)
     fb_fd = os.open("/dev/fb0", os.O_RDWR)
-    collector = SnapshotCollector(screen_snapshot)
+    collector = SnapshotCollector(
+        screen_snapshot, observe=metrics.observe_collect if metrics else None,
+        observe_snapshot=metrics.observe_snapshot if metrics else None)
     listener = open_control()
+    if metrics:
+        metrics.set_page(initial_view)
+        metrics.start()
     collector.start()
     try:
         line_length = framebuffer_info(fb_fd)
@@ -492,30 +482,33 @@ def run_touch(painter, initial_view="panel"):
         last_sequence = -1
         with mmap.mmap(fb_fd, line_length * HEIGHT, mmap.MAP_SHARED, mmap.PROT_WRITE) as framebuffer:
             def blit():
-                pixels, stride = painter.pixels()
-                # The i915 fbdev write path reports damaged regions to DRM.
-                # Direct mmap stores may leave FBC displaying an old frame.
-                frame = bytearray(line_length * HEIGHT)
-                for y in range(HEIGHT):
-                    frame[y * line_length:y * line_length + WIDTH * 4] = pixels[y * stride:y * stride + WIDTH * 4]
-                written = 0
-                while written < len(frame):
-                    count = os.pwrite(fb_fd, memoryview(frame)[written:], written)
-                    if count <= 0:
-                        raise OSError("short framebuffer write")
-                    written += count
+                started_ns = time.monotonic_ns() if metrics else 0
+                succeeded = False
+                try:
+                    pixels, stride = painter.pixels()
+                    # The i915 fbdev write path reports damaged regions to DRM.
+                    # Direct mmap stores may leave FBC displaying an old frame.
+                    write_frame(fb_fd, pixels, stride, line_length, WIDTH, HEIGHT)
+                    succeeded = True
+                finally:
+                    if metrics:
+                        metrics.record("fb_write", time.monotonic_ns() - started_ns, succeeded)
 
             def refresh(use_cache=False, view=None):
                 nonlocal last_data, last_sequence
-                if use_cache and last_data is not None:
-                    data = dict(last_data)
-                    data["clock"] = time.strftime("%H:%M")
-                else:
-                    data, last_sequence = collector.latest()
-                    last_data = data
+                data, last_sequence = collector.latest()
+                last_data = data
+                data["clock"] = time.strftime("%H:%M")
                 if (view or state) == "fans":
                     data["control"] = control_status()
-                painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum), view=view or state)
+                started_ns = time.monotonic_ns() if metrics else 0
+                succeeded = False
+                try:
+                    painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum), view=view or state)
+                    succeeded = True
+                finally:
+                    if metrics:
+                        metrics.record("render", time.monotonic_ns() - started_ns, succeeded)
                 blit()
                 # getty@tty2 can start after the first chvt and re-enable its
                 # text cursor. Reassert the per-VT hide after every redraw.
@@ -569,7 +562,8 @@ def run_touch(painter, initial_view="panel"):
                 nonlocal state, next_refresh
                 if target == state:
                     return
-
+                if metrics:
+                    metrics.set_page(target)
                 if target in ("panel", "fans"):
                     show_dashboard(target)
                     next_refresh = time.monotonic() + 0.2
@@ -657,6 +651,12 @@ def run_touch(painter, initial_view="panel"):
                     raise ValueError("unknown command")
                 return {"ok": True, "state": state}
 
+            def refresh_delay():
+                status = control_status() if state == "fans" else None
+                fast = bool(status and status["live"]
+                            and (status["desired"] != status["mode"] or status["mode"] == "full"))
+                return 1 if fast else 15
+
             try:
                 fb_blank.write_text("0")
                 (backlight / "bl_power").write_text("0")
@@ -693,17 +693,15 @@ def run_touch(painter, initial_view="panel"):
                             except (OSError, RuntimeError, ValueError) as error:
                                 print(f"gesture={action} error={error}", flush=True)
                     if state in ("panel", "fans") and time.monotonic() >= next_refresh:
-                        status = control_status() if state == "fans" else None
-                        fast = bool(status and status["live"]
-                                    and (status["desired"] != status["mode"]
-                                         or status["mode"] == "full"))
+                        delay = refresh_delay()
                         _, sequence = collector.latest()
-                        refresh(use_cache=fast and sequence == last_sequence)
-                        next_refresh = time.monotonic() + (1 if fast else 15)
+                        refresh(use_cache=delay == 1 and sequence == last_sequence)
+                        next_refresh = time.monotonic() + delay
                     elif state in ("panel", "fans"):
                         _, sequence = collector.latest()
                         if sequence != last_sequence:
                             refresh()
+                            next_refresh = time.monotonic() + refresh_delay()
             finally:
                 fb_blank.write_text("0")
                 (backlight / "bl_power").write_text("0")
@@ -712,6 +710,8 @@ def run_touch(painter, initial_view="panel"):
                 switch_vt(1)
     finally:
         collector.stop()
+        if metrics:
+            metrics.stop()
         listener.close()
         os.close(fb_fd)
         os.close(touch_fd)
@@ -726,13 +726,14 @@ def main():
                         help="Dashboard page shown first in touch mode")
     parser.add_argument("--once", action="store_true", help="Draw once and exit")
     parser.add_argument("--touch", action="store_true", help="Enable tap/vertical-swipe trial")
+    parser.add_argument("--metrics", action="store_true", help="Emit optional one-minute operation metrics")
     args = parser.parse_args()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     painter = Painter()
     try:
         if args.touch:
-            run_touch(painter, initial_view=args.initial_view)
+            run_touch(painter, initial_view=args.initial_view, metrics=MinuteMetrics() if args.metrics else None)
             return
         if args.preview:
             painter.draw(screen_snapshot(), view=args.view)

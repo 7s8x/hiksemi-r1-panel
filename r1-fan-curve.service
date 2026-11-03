@@ -5,6 +5,7 @@ StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
+EnvironmentFile=-/var/lib/r1-panel/driver.env
 Type=simple
 StateDirectory=r1-fan-curve
 StateDirectoryMode=0700

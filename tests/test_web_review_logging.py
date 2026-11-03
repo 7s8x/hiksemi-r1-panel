@@ -53,7 +53,7 @@ class WebLoggingReviewTests(unittest.TestCase):
             with patch.object(web, 'LOG_ENABLED', True), patch.object(web, 'WEB_LOG_FILE', target), patch.object(web, '_WEB_LOG_MAX_BYTES', 1):
                 for _ in range(7): web._web_log('fixture')
                 self.assertEqual(len(list(target.parent.glob('access.log*'))), 4)
-            with patch.object(web, 'LOG_ENABLED', True), patch.object(web, 'WEB_LOG_FILE', Path(directory)):
+            with patch.object(web, 'LOG_ENABLED', True), patch.object(web, 'WEB_LOG_FILE', Path(directory) / 'denied.log'), patch.object(web.os, 'open', side_effect=PermissionError):
                 web._web_log('fixture')
 
 if __name__ == '__main__': unittest.main()

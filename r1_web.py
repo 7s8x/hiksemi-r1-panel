@@ -22,6 +22,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import ssl
 import struct
 import subprocess
@@ -37,12 +38,15 @@ import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
 from r1_web_views import drive_models, render_fans, render_information, system_identity
 from r1_svg_painter import paint_svg
+from r1_site_config import bay_states
+from r1_vm_status import vm_statuses
 from r1_web_capacity import storage_capacity
 from r1_fan_curve import temperatures as fan_temperatures
 from r1_theme import load_theme, save_theme
 
 
 SELECTABLE_THEMES = ("mocha", "latte")
+PUBLIC_READONLY = os.environ.get("R1_WEB_PUBLIC", "1").strip().lower() not in ("0", "off", "false", "no")
 
 
 STATE_DIR = Path("/var/lib/r1-web")
@@ -198,11 +202,19 @@ def change_admin_password(current: str, new: str) -> None:
             raise ValueError("new password must differ from current password")
         atomic_json(ADMIN_FILE, hash_password(new))
         SESSIONS.clear()
+        try:
+            INITIAL_FILE.unlink(missing_ok=True)
+        except OSError:
+            # The password change is already committed. Do not report it as failed.
+            _web_log("operation_error initial_password_cleanup")
 
 
-def initialize():
+def initialize(*, tls=False, tls_name="localhost"):
     STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(STATE_DIR, 0o700)
+    theme_file = STATE_DIR / "theme.json"
+    if not theme_file.exists():
+        save_theme("mocha", path=theme_file)
     if not ADMIN_FILE.exists():
         password = secrets.token_urlsafe(24)
         atomic_json(ADMIN_FILE, hash_password(password))
@@ -210,11 +222,21 @@ def initialize():
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             stream.write(password + "\n")
         print(f"Initial password stored locally at {INITIAL_FILE}; not printed", flush=True)
+    if not tls:
+        return
+    try:
+        address = ipaddress.ip_address(tls_name)
+        san = f"IP:{address}"
+    except ValueError:
+        import re
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?", tls_name):
+            raise ValueError("invalid certificate DNS name")
+        san = f"DNS:{tls_name}"
     if not CERT_FILE.exists() or not KEY_FILE.exists():
         subprocess.run([
             "openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256",
-            "-sha256", "-nodes", "-days", "365", "-subj", "/CN=192.168.50.3",
-            "-addext", "subjectAltName=IP:192.168.50.3",
+            "-sha256", "-nodes", "-days", "365", "-subj", f"/CN={tls_name}",
+            "-addext", f"subjectAltName={san}",
             "-keyout", str(KEY_FILE), "-out", str(CERT_FILE),
         ], check=True, capture_output=True, timeout=20)
         os.chmod(KEY_FILE, 0o600)
@@ -232,13 +254,14 @@ def png_chunk(kind: bytes, payload: bytes) -> bytes:
 def rgb_png(frame: bytes, stride: int) -> bytes:
     if len(frame) < stride * HEIGHT or stride < WIDTH * 4:
         raise ValueError("short framebuffer")
-    rows = bytearray()
+    rows = bytearray((WIDTH * 3 + 1) * HEIGHT)
     for y in range(HEIGHT):
-        rows.append(0)
         start = y * stride
-        for x in range(WIDTH):
-            pixel = start + x * 4
-            rows.extend((frame[pixel + 2], frame[pixel + 1], frame[pixel]))
+        row = frame[start:start + WIDTH * 4]
+        offset = y * (WIDTH * 3 + 1) + 1
+        rows[offset:offset + WIDTH * 3:3] = row[2::4]
+        rows[offset + 1:offset + WIDTH * 3:3] = row[1::4]
+        rows[offset + 2:offset + WIDTH * 3:3] = row[0::4]
     header = struct.pack(">IIBBBBB", WIDTH, HEIGHT, 8, 2, 0, 0, 0)
     return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", header)
             + png_chunk(b"IDAT", zlib.compress(rows, 3)) + png_chunk(b"IEND", b""))
@@ -275,6 +298,7 @@ def public_snapshot() -> dict:
     storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
     drive_temps = []
     disks = panel_repo.discover_drives()
+    vms = vm_statuses()
     pve_version, cpu_model = system_identity()
     for bay, (_, disk) in enumerate(disks, start=1):
         label = f"BAY {bay}"
@@ -287,7 +311,7 @@ def public_snapshot() -> dict:
         drive_temps.append((label, temperature))
     usage = panel_repo.storage_usage(disks)
     capacity = storage_capacity(disks)
-    fan_cpu_temp, fan_drive_temp, fan_drive_count = fan_temperatures()
+    fan_cpu_temp, fan_drive_temp, fan_drive_count = fan_temperatures(disks=disks)
     rgb = None
     try:
         response = request({"action": "rgb_state", "value": None})
@@ -304,12 +328,13 @@ def public_snapshot() -> dict:
         "storage_models": drive_models(disks),
         "storage_usage": usage,
         "storage_capacity": capacity,
+        "bay_states": bay_states(disks),
         "pve_version": pve_version,
         "cpu_model": cpu_model,
         "mem_total": total,
         "mem_used": used,
         "uptime": uptime,
-        "vms": [(f"VM {vmid}", panel_repo.vm_status(vmid)) for vmid in (100, 111)],
+        "vms": [(f"VM {vmid}", status) for vmid, status in vms.items()],
         "fans": panel_repo.fan_readings(),
         "control": control_status(),
         "rgb": rgb,
@@ -346,8 +371,77 @@ def client_allowed(address: str) -> bool:
         return False
 
 
+class BoundedHTTPServer(ThreadingHTTPServer):
+    """Bound active sockets, including slow TLS handshakes, before creating workers."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, address, handler, *, context=None, max_connections=32):
+        self.context = context
+        self._slots = threading.BoundedSemaphore(max_connections)
+        super().__init__(address, handler)
+
+    def get_request(self):
+        connection, address = super().get_request()
+        connection.settimeout(15)
+        return connection, address
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            if self.context is not None:
+                request = self.context.wrap_socket(request, server_side=True)
+            super().process_request_thread(request, client_address)
+        except (OSError, ValueError):
+            self.shutdown_request(request)
+            _web_log("operation_error connection")
+        finally:
+            self._slots.release()
+
+    def handle_error(self, request, client_address):
+        # Avoid exception text or request data in the system journal.
+        _web_log("operation_error request")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "R1PanelWeb/1"
+    protocol_version = "HTTP/1.1"
+    timeout = 15
+
+    def handle_expect_100(self):
+        self.send_error(417, "expectation not supported")
+        return False
+
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        lengths = self.headers.get_all("Content-Length", [])
+        hosts = self.headers.get_all("Host", [])
+        if (len(hosts) != 1 or len(lengths) > 1 or
+                self.headers.get_all("Transfer-Encoding", [])):
+            self.send_error(400, "invalid request framing")
+            return False
+        if lengths:
+            length = lengths[0]
+            if not length.isascii() or not length.isdecimal() or len(length) > 5:
+                self.send_error(400, "invalid body length")
+                return False
+            if int(length) > 4096:
+                self.send_error(413, "body too large")
+                return False
+            if self.command != "POST" and int(length) != 0:
+                self.send_error(400, "unexpected request body")
+                return False
+        return True
 
     def log_request(self, code="-", size="-"):
         if not LOG_ENABLED:
@@ -363,9 +457,14 @@ class Handler(BaseHTTPRequestHandler):
                      _sanitize_access_path(getattr(self, "path", "")))
 
     def _send(self, code: int, body: bytes, mime: str, extra: dict | None = None):
+        if code >= 400:
+            # Rejected POSTs may have an unread body; never reuse that socket.
+            self.close_connection = True
         self.send_response(code)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(body)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.send_header("Cache-Control", "no-store, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -443,13 +542,35 @@ class Handler(BaseHTTPRequestHandler):
         if not client_allowed(self.client_address[0]):
             self._json(403, {"error": "source denied"})
             return False
+        if not self._host_ok():
+            self._json(403, {"error": "host denied"})
+            return False
         return True
+
+    def _host_ok(self) -> bool:
+        authority = self._request_host()
+        if any(c in authority for c in "\\/@#?\r\n\t "):
+            return False
+        try:
+            parsed = urlsplit("//" + authority)
+            host = parsed.hostname
+            port = parsed.port
+            if not host or port == 0:
+                return False
+            # Deployment domain policy belongs to the reverse proxy.
+            # Keep authority syntax checks without a domain allowlist.
+            return True
+        except (OSError, ValueError, AttributeError):
+            return False
 
     def _body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if not 0 < length <= 4096:
             raise ValueError("invalid body length")
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        payload = self.rfile.read(length)
+        if len(payload) != length:
+            raise ValueError("incomplete body")
+        return json.loads(payload.decode("utf-8"))
 
     def do_GET(self):
         if not self._allowed():
@@ -466,6 +587,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/public/panel.png", "/public/fans.png",
                     "/public/panel.svg", "/public/fans.svg"):
+            if not PUBLIC_READONLY and self._session() is None:
+                self._json(401, {"error": "login required"})
+                return
             frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
             view = "panel" if "/panel." in path else "fans"
             svg = path.endswith(".svg")
@@ -486,7 +610,8 @@ class Handler(BaseHTTPRequestHandler):
                 curve_error = None
             except (OSError, ValueError, KeyError, TypeError) as error:
                 active_curves = DEFAULT
-                curve_error = str(error)[:120]
+                curve_error = "curve configuration unavailable"
+                _web_log("operation_error curve_read")
             self._json(200, {"panel": panel, "fan": control_status(),
                              "curves": active_curves, "curve_id": digest(active_curves),
                              "baseline": DEFAULT,
@@ -501,13 +626,15 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 self._send(200, capture_frame(panel["state"]), "image/png")
             except (OSError, RuntimeError, ValueError) as error:
-                self._json(503, {"error": f"capture unavailable: {error}"})
+                _web_log("operation_error capture")
+                self._json(503, {"error": "capture unavailable"})
         elif path == "/api/rgb":
             try:
                 response = request({"action": "rgb_state", "value": None})
-                self._json(200 if response.get("ok") else 503, response)
+                self._json(200, response) if response.get("ok") else self._json(503, {"error": "RGB unavailable"})
             except (OSError, ValueError) as error:
-                self._json(503, {"error": str(error)})
+                _web_log("operation_error rgb_read")
+                self._json(503, {"error": "RGB unavailable"})
         else:
             self._json(404, {"error": "not found"})
 
@@ -520,6 +647,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         try:
             body = self._body()
+        except (TimeoutError, OSError):
+            self._json(408, {"error": "request timeout"})
+            return
         except (ValueError, UnicodeError, TypeError):
             self._json(400, {"error": "invalid JSON"})
             return
@@ -580,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")
                 result = request(body)
-                self._json(200 if result.get("ok") else 400, result)
+                self._json(200, result) if result.get("ok") else self._json(400, {"error": "panel command rejected"})
             elif path == "/api/fan/mode":
                 if not isinstance(body, dict) or body.get("mode") not in ("auto", "full"):
                     raise ValueError("invalid fan mode")
@@ -609,11 +739,12 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"mode", "red", "green", "blue"}:
                     raise ValueError("invalid RGB request")
                 result = request({"action": "rgb", "value": [body[name] for name in ("mode", "red", "green", "blue")]})
-                self._json(200 if result.get("ok") else 400, result)
+                self._json(200, result) if result.get("ok") else self._json(400, {"error": "RGB command rejected"})
             else:
                 self._json(404, {"error": "not found"})
         except (OSError, RuntimeError, ValueError, TypeError) as error:
-            self._json(400, {"error": str(error)[:160]})
+            _web_log("operation_error command")
+            self._json(400, {"error": "command rejected or unavailable"})
 
 
 def main():
@@ -626,11 +757,12 @@ def main():
     parser.add_argument("--port", type=int, default=8080, help="TCP port to serve on")
     parser.add_argument("--tls", action="store_true",
                         help="serve over HTTPS using the init-generated or a supplied cert/key")
+    parser.add_argument("--tls-name", default="localhost", help="certificate IP or DNS name for init --tls")
     parser.add_argument("--cert", default=None, help="TLS certificate path (used with --tls)")
     parser.add_argument("--key", default=None, help="TLS private key path (used with --tls)")
     args = parser.parse_args()
     if args.action == "init":
-        initialize()
+        initialize(tls=args.tls, tls_name=args.tls_name)
         return
     if not ADMIN_FILE.is_file():
         raise RuntimeError("run init before serving")
@@ -642,14 +774,7 @@ def main():
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(str(cert), str(key))
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    server.daemon_threads = True
-    if context is not None:
-        try:
-            server.socket = context.wrap_socket(server.socket, server_side=True)
-        except Exception:
-            server.server_close()
-            raise
+    server = BoundedHTTPServer((args.host, args.port), Handler, context=context)
     PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15)
     PUBLIC_COLLECTOR.start()
     try:

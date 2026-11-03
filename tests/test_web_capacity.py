@@ -12,6 +12,28 @@ import r1_web_capacity as capacity  # noqa: E402
 
 
 class WebCapacityTests(unittest.TestCase):
+    def test_cache_invalidates_when_same_device_name_has_new_generation(self):
+        with (patch.object(capacity, "_cached_capacity", None),
+              patch.object(capacity, "_config", return_value=None),
+              patch.object(capacity, "disk_generation", side_effect=[("generation1",), ("generation1",), ("generation2",)]),
+              patch.object(capacity, "_nvme_capacity", return_value=(60, 940, 6)) as read,
+              patch.object(capacity.time, "monotonic", return_value=100)):
+            disks = (("BAY 1", "/dev/sda"),)
+            capacity.storage_capacity(disks)
+            capacity.storage_capacity(disks)
+            self.assertEqual(read.call_count, 1)
+            capacity.storage_capacity(disks)
+            self.assertEqual(read.call_count, 2)
+
+    def test_failed_query_does_not_keep_old_capacity_after_expiry(self):
+        with (patch.object(capacity, "_cached_capacity", None),
+              patch.object(capacity, "_config", return_value=None),
+              patch.object(capacity, "disk_generation", return_value=()),
+              patch.object(capacity, "_nvme_capacity", side_effect=[(60, 940, 6), None]),
+              patch.object(capacity.time, "monotonic", side_effect=[100, 161])):
+            self.assertEqual(capacity.storage_capacity(()), [(60, 940, 6)])
+            self.assertEqual(capacity.storage_capacity(()), [None])
+
     def test_nvme_reads_recent_bytes(self):
         def run(args, _timeout):
             if args[2].endswith("/status"):

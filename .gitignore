@@ -28,3 +28,8 @@ venv/
 # 本地预览产物（仅仓库根目录，docs/images/ 下的正式配图不受影响）
 /preview*.png
 /screenshot*.png
+
+# Host-specific deployment configuration
+site.json
+driver.env
+web.env
