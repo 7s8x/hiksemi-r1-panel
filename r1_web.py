@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
 import ipaddress
 import json
+import re
 import os
 from pathlib import Path
 import secrets
@@ -36,12 +37,9 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
-from r1_web_views import drive_models, render_fans, render_information, system_identity
+from r1_web_views import render_fans, render_information
+from r1_collection import read_snapshot
 from r1_svg_painter import paint_svg
-from r1_site_config import bay_states
-from r1_vm_status import vm_statuses
-from r1_web_capacity import storage_capacity
-from r1_fan_curve import temperatures as fan_temperatures
 from r1_theme import load_theme, save_theme
 
 
@@ -287,60 +285,26 @@ def capture_frame(state: str) -> bytes:
 
 
 def public_snapshot() -> dict:
-    """Collect read-only data without exposing disk serials or VM names."""
-    total, used = panel_repo.memory()
+    """Project only display fields; never expose the raw collector document."""
+    source = read_snapshot()
+    allowed = ('cpu', 'cpu_usage', 'nvme', 'drives', 'storage_models', 'storage_usage',
+               'storage_capacity', 'bay_states', 'pve_version', 'cpu_model', 'mem_total',
+               'mem_used', 'uptime', 'fans', 'fan_basis', 'captured_at', 'freshness')
+    data = {k: source[k] for k in allowed if k in source}
+    data['storage'] = [((str(identity[0]), str(identity[1]), '****'), temp)
+                       for identity, temp in source.get('storage', [])]
+    data['vms'] = [(name if re.fullmatch(r'VM [0-9]+', str(name)) else 'VM --', status)
+                   for name, status in source.get('vms', [])]
+    data['clock'] = time.strftime('%H:%M')
+    data['control'] = control_status()
+    data['rgb'] = None
     try:
-        uptime = int(float(panel_repo.read_text("/proc/uptime").split()[0]))
-    except (ValueError, IndexError):
-        uptime = 0
-    nvme_temp = panel_repo.temp_for_hwmon("nvme")
-    nvme_size, nvme_kind, _ = panel_repo.nvme_identity()
-    storage = [((nvme_size, nvme_kind, "****"), nvme_temp)]
-    drive_temps = []
-    disks = panel_repo.discover_drives()
-    vms = vm_statuses()
-    pve_version, cpu_model = system_identity()
-    for bay, (_, disk) in enumerate(disks, start=1):
-        label = f"BAY {bay}"
-        if disk is None:
-            storage.append(((label, "UNVERIFIED", "--"), None))
-            continue
-        temperature = panel_repo.drive_temperature(disk)
-        size, kind, _ = panel_repo.bay_identity(label, disk)
-        storage.append(((size, kind, "****"), temperature))
-        drive_temps.append((label, temperature))
-    usage = panel_repo.storage_usage(disks)
-    capacity = storage_capacity(disks)
-    fan_cpu_temp, fan_drive_temp, fan_drive_count = fan_temperatures(disks=disks)
-    rgb = None
-    try:
-        response = request({"action": "rgb_state", "value": None})
-        if response.get("ok") and isinstance(response.get("rgb"), list):
-            rgb = response["rgb"][0] != 0
+        response = request({'action': 'rgb_state', 'value': None})
+        if response.get('ok') and isinstance(response.get('rgb'), list):
+            data['rgb'] = response['rgb'][0] != 0
     except (OSError, ValueError, TypeError, KeyError):
         pass
-    return {
-        "cpu": panel_repo.temp_for_hwmon("coretemp"),
-        "fan_basis": (fan_cpu_temp, fan_drive_temp, fan_drive_count),
-        "cpu_usage": panel_repo.cpu_usage(),
-        "drives": drive_temps,
-        "storage": storage,
-        "storage_models": drive_models(disks),
-        "storage_usage": usage,
-        "storage_capacity": capacity,
-        "bay_states": bay_states(disks),
-        "pve_version": pve_version,
-        "cpu_model": cpu_model,
-        "mem_total": total,
-        "mem_used": used,
-        "uptime": uptime,
-        "vms": [(f"VM {vmid}", status) for vmid, status in vms.items()],
-        "fans": panel_repo.fan_readings(),
-        "control": control_status(),
-        "rgb": rgb,
-        "captured_at": time.monotonic(),
-        "clock": time.strftime("%H:%M"),
-    }
+    return data
 
 
 def collect_public_frames() -> dict:

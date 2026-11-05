@@ -1,7 +1,9 @@
 [Unit]
 Description=HIKSEMI R1 local HTTP panel management (optional TLS)
-After=network-online.target r1-panel.service r1-fan-curve.service
+After=network-online.target r1-panel.service r1-fan-curve.service r1-collector.service
 Wants=network-online.target
+
+Wants=r1-collector.service
 
 [Service]
 EnvironmentFile=-/var/lib/r1-web/web.env

@@ -1,7 +1,8 @@
 """Read-only capacity figures for the Web disk cards.
 
-The physical panel's percent-only collector stays unchanged. DSM reports
-per-volume KiB through its existing forced SSH command; PVE RRD supplies the
+The shared display collector schedules the private query helpers independently.
+The legacy combined helper is retained for compatibility and fixture tests only.
+DSM reports per-volume KiB through its existing forced SSH command; PVE RRD supplies the
 host stores when the Web service cannot access the LVM control device.
 """
 

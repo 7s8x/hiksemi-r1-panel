@@ -38,19 +38,14 @@ class WebTests(unittest.TestCase):
             self.addCleanup(patched.stop)
 
     def test_public_snapshot_masks_serials_and_vm_names(self):
-        with (patch("r1_web.panel_repo.discover_drives", return_value=(("secret disk label", "disk-id"),)),
-              patch("r1_web.panel_repo.memory", return_value=(16, 8)),
-              patch("r1_web.panel_repo.read_text", return_value="3600.0 0"),
-              patch("r1_web.panel_repo.temp_for_hwmon", return_value=42),
-              patch("r1_web.panel_repo.nvme_identity", return_value=("2TB", "NVME", "SECRET-NVME")),
-              patch("r1_web.panel_repo.disk_identity", return_value=("4TB", "HDD", "SECRET-DISK")),
-              patch("r1_web.panel_repo.drive_temperature", return_value=35),
-              patch("r1_web.panel_repo.storage_usage", return_value=[6, 87]),
-              patch("r1_web.storage_capacity", return_value=[(60_000_000_000, 940_000_000_000, 6), (870_000_000_000, 130_000_000_000, 87)]),
-              patch("r1_web.panel_repo.cpu_usage", return_value=28),
-              patch("r1_web.vm_statuses", return_value={100: "RUNNING", 111: "RUNNING"}),
-              patch("r1_web.panel_repo.fan_readings", return_value=None),
-              patch("r1_web.fan_temperatures", return_value=(65, 39, 4)),
+        source = {"storage": [(("2TB", "NVME", "SECRET-NVME"), 42),
+                              (("4TB", "HDD", "SECRET-DISK"), 35)],
+                  "storage_usage": [6, 87],
+                  "storage_capacity": [(60_000_000_000, 940_000_000_000, 6), None],
+                  "fan_basis": (65, 39, 4), "vms": [("VM 100", "RUNNING"), ("VM 111", "RUNNING")],
+                  "ip": "PRIVATE", "generation": "SECRET"}
+        with (patch("r1_web.read_snapshot", return_value=source),
+              patch("r1_web.panel_repo.discover_drives", side_effect=AssertionError("duplicate collection")),
               patch("r1_web.control_status", return_value={"live": False}),
               patch("r1_web.request", return_value={"ok": True, "rgb": [2, 255, 0, 0]})):
             data = public_snapshot()

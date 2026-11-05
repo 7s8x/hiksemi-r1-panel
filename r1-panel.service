@@ -1,9 +1,11 @@
 [Unit]
 Description=HIKSEMI R1 touch status panel
-After=local-fs.target systemd-logind.service r1-fan-curve.service
+After=local-fs.target systemd-logind.service r1-fan-curve.service r1-collector.service
 ConditionPathExists=/dev/fb0
 StartLimitIntervalSec=300
 StartLimitBurst=3
+
+Wants=r1-collector.service
 
 [Service]
 Type=simple

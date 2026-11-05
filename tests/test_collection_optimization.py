@@ -36,18 +36,13 @@ class CollectionOptimizationTests(unittest.TestCase):
             self.assertEqual(panel.vm_statuses()[100], "RUNNING")
             self.assertEqual(panel.vm_statuses()[100], "UNKNOWN")
 
-    def test_screen_uses_capacity_percent_and_preserves_missing(self):
-        disks = (("BAY 1", None),)
-        with patch.object(panel, "discover_drives", return_value=disks) as discover, \
-             patch.object(panel, "storage_capacity", return_value=[(60, 940, 6), None]), \
-             patch.object(panel, "snapshot", return_value={"vms": []}) as snap, \
-             patch.object(panel, "drive_models", return_value=[]), \
-             patch.object(panel, "system_identity", return_value=("PVE", "CPU")), \
-             patch.object(panel, "fan_temperatures", return_value=(60, 40)):
-            result = panel.screen_snapshot()
-        discover.assert_called_once()
-        snap.assert_called_once_with(disks=disks, usage=[6, None])
-        self.assertIsNone(result["storage_capacity"][1])
+    def test_screen_reads_shared_snapshot_without_host_queries(self):
+        expected = {"storage_capacity": [(60, 940, 6), None], "vms": []}
+        with patch.object(panel, "read_snapshot", return_value=expected) as read, \
+             patch.object(panel, "discover_drives", side_effect=AssertionError("duplicate collection")), \
+             patch.object(panel, "snapshot", side_effect=AssertionError("duplicate collection")):
+            self.assertEqual(panel.screen_snapshot(), expected)
+        read.assert_called_once_with()
 
     def test_identity_expires_and_failure_does_not_serve_old_version(self):
         with patch.object(views, "_identity_cache", None), \
