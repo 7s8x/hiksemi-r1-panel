@@ -7,40 +7,14 @@ test, not a background lighting daemon or proof of visual LED behavior.
 from __future__ import annotations
 
 import argparse
-import ctypes
 import os
 import time
 
-from r1_rgb_probe import (
-    I2C_SLAVE,
-    I2C_SMBUS,
-    I2C_SMBUS_BYTE_DATA,
-    RGB_ADDRESS,
-    SmbusData,
-    SmbusIoctlData,
-    ioctl_checked,
-    read_byte_data,
-)
+from r1_rgb_io import (I2C_SLAVE, RGB_ADDRESS, REG_MODE, REG_RED, REG_GREEN,
+                       REG_BLUE, REGISTERS, ioctl_checked, read_byte_data, write_byte_data)
 
-I2C_SMBUS_WRITE = 0
 BUS_PATH = "/dev/i2c-0"
-REG_MODE = 0x90
-REG_RED = 0x92
-REG_GREEN = 0x93
-REG_BLUE = 0x94
-REGISTERS = (REG_MODE, REG_RED, REG_GREEN, REG_BLUE)
 BASELINE = (2, 255, 0, 0)
-
-
-def write_byte_data(fd: int, register: int, value: int) -> None:
-    if register not in REGISTERS or not 0 <= value <= 255:
-        raise ValueError("register or value is outside the narrow RGB trial scope")
-    data = SmbusData()
-    data.byte = value
-    operation = SmbusIoctlData(
-        I2C_SMBUS_WRITE, register, I2C_SMBUS_BYTE_DATA, ctypes.pointer(data)
-    )
-    ioctl_checked(fd, I2C_SMBUS, ctypes.byref(operation))
 
 
 def read_state(fd: int) -> tuple[int, int, int, int]:

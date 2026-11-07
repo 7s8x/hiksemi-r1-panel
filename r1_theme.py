@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 
 THEME_FILE = Path("/var/lib/r1-web/theme.json")
+# Missing/damaged configuration uses the original palette; first-install Mocha is separate.
 DEFAULT = "current"
 CHOICES = ("current", "mocha", "latte")
 

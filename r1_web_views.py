@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 import re
-import subprocess
-import threading
-import time
 from xml.sax.saxutils import escape
 
 from r1_theme import theme_svg
 from r1_site_config import SITE
+from r1_host_sampling import system_identity, drive_models
 
 
 ROOT = Path(__file__).resolve().parent
-_identity_lock = threading.Lock()
-_identity_cache = None
-_identity_expires = 0.0
 TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
@@ -28,42 +22,6 @@ def _template(name: str, values: dict[str, object]) -> bytes:
     if missing:
         raise ValueError(f"missing Web display fields: {sorted(missing)}")
     return TOKEN.sub(lambda match: escape(str(values[match.group(1)])), source).encode("utf-8")
-
-
-def system_identity() -> tuple[str, str]:
-    """Cache stable host labels for five minutes; retry failures next sample."""
-    global _identity_cache, _identity_expires
-    with _identity_lock:
-        if _identity_cache is not None and time.monotonic() < _identity_expires:
-            return _identity_cache
-        value = _read_system_identity()
-        if "--" not in value[0]:
-            _identity_cache = value
-            _identity_expires = time.monotonic() + 300
-        else:
-            _identity_cache = None
-        return value
-
-
-def drive_models(disks: tuple) -> list[str]:
-    """Read model fields only; never derive a display label from by-id serials."""
-    try:
-        controller = next(iter(sorted(Path("/sys/class/nvme").glob("nvme*"))))
-        nvme = (controller / "model").read_text(encoding="utf-8").strip()
-    except (OSError, StopIteration):
-        nvme = "--"
-    models = [nvme]
-    for _, disk in disks:
-        if disk is None:
-            models.append("--")
-            continue
-        try:
-            block = (Path("/dev/disk/by-id") / disk).resolve(strict=True).name
-            model = (Path("/sys/block") / block / "device/model").read_text(encoding="utf-8").strip()
-        except (OSError, RuntimeError):
-            model = "--"
-        models.append(model)
-    return [re.sub(r"\s+", " ", value)[:24].strip() or "--" for value in models]
 
 
 def _number(value, low=0, high=100):
@@ -247,23 +205,3 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
     return theme_svg(_template(template, values), theme)
 
 
-def _read_system_identity() -> tuple[str, str]:
-    """Return short, non-secret host labels for the public Web headers."""
-    try:
-        result = subprocess.run(["pveversion"], capture_output=True, text=True,
-                                check=True, timeout=3)
-        version = re.search(r"pve-manager/([0-9]+(?:\.[0-9]+){1,2})", result.stdout)
-    except (OSError, subprocess.SubprocessError):
-        version = None
-    pve = "PROXMOX VE " + (version.group(1) if version else "--")
-    try:
-        cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8")
-    except OSError:
-        cpuinfo = ""
-    model = re.search(r"^model name\s*:\s*(.+)$", cpuinfo, re.MULTILINE)
-    cores = re.search(r"^cpu cores\s*:\s*([0-9]+)$", cpuinfo, re.MULTILINE)
-    label = re.sub(r"\s+", " ", re.sub(r"\((?:R|TM)\)", "", model.group(1))).strip() if model else "CPU"
-    label = label[:18].rstrip()
-    threads = os.cpu_count()
-    detail = f" · {cores.group(1)}C / {threads}T" if cores and threads else ""
-    return pve, label + detail

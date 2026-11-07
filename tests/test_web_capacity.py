@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import r1_web_capacity as capacity  # noqa: E402
+import r1_storage_queries as capacity  # noqa: E402
 
 
 class WebCapacityTests(unittest.TestCase):
@@ -22,9 +22,9 @@ class WebCapacityTests(unittest.TestCase):
             return json.dumps([{"time": 1000, "total": total, "used": used}])
 
         with patch.object(capacity, "_run", side_effect=run), patch.object(capacity.time, "time", return_value=1100):
-            self.assertEqual(capacity._nvme_capacity(), (500, 9500, 5))
+            self.assertEqual(capacity.nvme_capacity(), (500, 9500, 5))
         with patch.object(capacity, "_run", side_effect=run), patch.object(capacity.time, "time", return_value=1400):
-            self.assertIsNone(capacity._nvme_capacity())
+            self.assertIsNone(capacity.nvme_capacity())
 
     def test_nvme_prefers_actual_available_bytes(self):
         def run(args, _timeout):
@@ -32,7 +32,7 @@ class WebCapacityTests(unittest.TestCase):
             return json.dumps(row)
 
         with patch.object(capacity, "_run", side_effect=run):
-            self.assertEqual(capacity._nvme_capacity(), (500, 9400, 5))
+            self.assertEqual(capacity.nvme_capacity(), (500, 9400, 5))
 
     def test_zero_lvm_status_falls_back_to_recent_rrd(self):
         def run(args, _timeout):
@@ -44,7 +44,7 @@ class WebCapacityTests(unittest.TestCase):
                                 "used": 60 if local else 440}])
 
         with patch.object(capacity, "_run", side_effect=run), patch.object(capacity.time, "time", return_value=1100):
-            self.assertEqual(capacity._nvme_capacity(), (500, 9460, 5))
+            self.assertEqual(capacity.nvme_capacity(), (500, 9460, 5))
 
     def test_guest_accepts_only_valid_numeric_capacity(self):
         config = ("192.0.2.4", "fs", 100, Path("/key"), Path("/known"), 233)
@@ -53,7 +53,7 @@ class WebCapacityTests(unittest.TestCase):
                   "CAPACITY 6 80 1000 1200 0\n"
                   "CAPACITY 7 10 1000 100 1000\n")
         with patch.object(capacity, "_run", return_value=output):
-            self.assertEqual(capacity._guest_capacity(config),
+            self.assertEqual(capacity.guest_capacity(config),
                              {4: (40 * 1024, 960 * 1024, 4), 5: (970 * 1024, 30 * 1024, 97)})
 
 

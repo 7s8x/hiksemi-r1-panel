@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import r1_storage_usage as usage  # noqa: E402
+import r1_storage_queries as usage  # noqa: E402
 
 
 class StorageUsageTests(unittest.TestCase):
@@ -37,8 +37,8 @@ class StorageUsageTests(unittest.TestCase):
 
     def test_missing_guest_config_never_queries_or_guesses_capacity(self):
         from r1_collection import collect_slow
-        with (patch("r1_web_capacity._config", return_value=None),
-              patch("r1_web_capacity._guest_capacity", side_effect=AssertionError("unexpected SSH"))):
+        with (patch("r1_storage_queries._config", return_value=None),
+              patch("r1_storage_queries.guest_capacity", side_effect=AssertionError("unexpected SSH"))):
             self.assertEqual(collect_slow("dsm", (("BAY 1", "disk"),)), {"capacity": [None]})
 
 

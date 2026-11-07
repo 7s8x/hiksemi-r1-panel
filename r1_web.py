@@ -735,7 +735,7 @@ def main():
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(str(cert), str(key))
     server = BoundedHTTPServer((args.host, args.port), Handler, context=context)
-    PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15)
+    PUBLIC_COLLECTOR = SnapshotCollector(collect_public_frames, interval=15, empty=dict)
     PUBLIC_COLLECTOR.start()
     try:
         server.serve_forever(poll_interval=0.5)

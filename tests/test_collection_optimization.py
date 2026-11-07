@@ -45,20 +45,13 @@ class CollectionOptimizationTests(unittest.TestCase):
             self.assertEqual(panel.screen_snapshot(), expected)
         read.assert_called_once_with()
 
-    def test_identity_expires_and_failure_does_not_serve_old_version(self):
-        with patch.object(views, "_identity_cache", None), \
-             patch.object(views, "_identity_expires", 0), \
-             patch.object(views.time, "monotonic", return_value=100) as clock, \
-             patch.object(views, "_read_system_identity", side_effect=[
-                 ("PROXMOX VE 9.1.1", "CPU"), ("PROXMOX VE --", "CPU"),
-                 ("PROXMOX VE 9.2.0", "CPU")]) as read:
-            self.assertEqual(views.system_identity()[0], "PROXMOX VE 9.1.1")
-            clock.return_value = 399
-            views.system_identity()
-            self.assertEqual(read.call_count, 1)
-            clock.return_value = 401
-            self.assertEqual(views.system_identity()[0], "PROXMOX VE --")
-            self.assertEqual(views.system_identity()[0], "PROXMOX VE 9.2.0")
+    def test_identity_scheduling_does_not_add_a_second_cache(self):
+        import r1_collection as shared
+        with patch('r1_host_sampling.system_identity', side_effect=[
+                ('PROXMOX VE 9.1.1', 'CPU'), ('PROXMOX VE --', 'CPU')]) as read:
+            self.assertEqual(shared.collect_slow('identity', ())['pve_version'], 'PROXMOX VE 9.1.1')
+            self.assertEqual(shared.collect_slow('identity', ())['pve_version'], 'PROXMOX VE --')
+        self.assertEqual(read.call_count, 2)
 
 
 if __name__ == "__main__":

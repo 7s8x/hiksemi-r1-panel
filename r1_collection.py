@@ -12,6 +12,7 @@ import threading
 import time
 
 from r1_site_config import SITE
+from r1_snapshot import empty_display, FAST_FIELDS
 
 SNAPSHOT = Path('/run/r1-collector/snapshot.json')
 INTERVALS = {'fast': 5, 'vm': 60, 'nvme': 300, 'dsm': 1800, 'identity': 300}
@@ -21,16 +22,6 @@ MAX_BYTES = 262144
 
 def boot_id():
     return Path('/proc/sys/kernel/random/boot_id').read_text().strip()
-
-
-def empty_display():
-    return {'cpu': None, 'cpu_usage': None, 'nvme': None, 'drives': [],
-            'storage': [], 'storage_models': [], 'bay_states': [],
-            'storage_usage': [None] * 5, 'storage_capacity': [None] * 5,
-            'mem_total': None, 'mem_used': None, 'uptime': None, 'ip': '--',
-            'vms': [(f'VM {v}', 'UNKNOWN') for v in SITE.vmids],
-            'fans': None, 'fan_basis': (None, None, 0), 'control': {}, 'rgb': None,
-            'clock': time.strftime('%H:%M'), 'captured_at': 0}
 
 
 def _finite(value):
@@ -57,9 +48,7 @@ def decode_snapshot(record, *, now, boot):
     fast = groups.get('fast', {})
     fast = fast if isinstance(fast, dict) else {}
     if valid['fast']:
-        allowed = ('cpu', 'cpu_usage', 'nvme', 'drives', 'storage', 'storage_models',
-                   'bay_states', 'mem_total', 'mem_used', 'uptime', 'fans', 'fan_basis')
-        data.update({k: fast['data'][k] for k in allowed if k in fast['data']})
+        data.update({k: fast['data'][k] for k in FAST_FIELDS if k in fast['data']})
         data['captured_at'] = fast['at']
     if valid['vm']:
         rows = groups['vm']['data'].get('vms', [])
@@ -129,9 +118,9 @@ class SharedReader:
 
 def collect_fast():
     # Lazy imports keep readers independent of device/renderer initialization.
-    import r1_panel_repository as panel
-    from r1_storage_usage import disk_generation
-    from r1_web_views import drive_models
+    import r1_host_sampling as panel
+    from r1_storage_queries import disk_generation
+    from r1_host_sampling import drive_models
     from r1_fan_curve import temperatures
     disks = panel.discover_drives()
     generation = disk_generation(disks)
@@ -161,19 +150,15 @@ def collect_slow(key, disks):
         from r1_vm_status import vm_statuses
         return {'vms': list(vm_statuses().items())}
     if key == 'identity':
-        from r1_web_views import system_identity
+        from r1_host_sampling import system_identity
         version, cpu = system_identity()
         return {'pve_version': version, 'cpu_model': cpu}
-    import r1_web_capacity as capacity
+    from r1_storage_queries import nvme_capacity, bay_capacities
     if key == 'nvme':
-        return {'capacity': [capacity._nvme_capacity()]}
-    # The only SSH call site in the display-data service, independent of NVMe cadence.
-    config = capacity._config()
-    rows = [None] * len(disks)
-    if config:
-        guest = capacity._guest_capacity(config)
-        rows = capacity._map_guest_to_bays(disks, capacity._host_sata(config), guest)
-    return {'capacity': rows}
+        return {'capacity': [nvme_capacity()]}
+    if key != 'dsm':
+        raise ValueError('unknown collection group')
+    return {'capacity': bay_capacities(disks)}
 
 
 class Collector:
