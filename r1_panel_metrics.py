@@ -16,7 +16,7 @@ import threading
 import time
 
 
-OPERATIONS = ("collect", "render", "fb_write")
+OPERATIONS = ("collect", "prepare", "render", "fb_write")
 HISTOGRAM_BOUNDS_MS = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000)
 
 
@@ -74,6 +74,7 @@ class MinuteMetrics:
         self._samples = {name: [] for name in OPERATIONS}
         self._errors = {name: 0 for name in OPERATIONS}
         self._histograms = {name: [0] * (len(HISTOGRAM_BOUNDS_MS) + 1) for name in OPERATIONS}
+        self._cache_hits = 0
         self._unavailable = {}
         self._page = "panel"
         self._page_counts = {page: 0 for page in ("panel", "fans", "console", "off")}
@@ -108,6 +109,10 @@ class MinuteMetrics:
             if operation == "render":
                 self._page_counts[self._page] += 1
 
+    def cache_hit(self):
+        with self._lock:
+            self._cache_hits += 1
+
     def observe_collect(self, elapsed_ns: int, succeeded: bool):
         self.record("collect", elapsed_ns, succeeded)
 
@@ -132,6 +137,7 @@ class MinuteMetrics:
 
     def emit(self):
         with self._lock:
+            cache_hits, self._cache_hits = self._cache_hits, 0
             samples = self._samples
             errors = self._errors
             page = self._page
@@ -154,6 +160,7 @@ class MinuteMetrics:
             "unavailable_fields": unavailable,
             "page": page,
             "page_renders": page_counts,
+            "render_cache_hits": cache_hits,
             **{name: summarize(samples[name]) for name in OPERATIONS},
             **{name + "_errors": errors[name] for name in OPERATIONS},
             "process_cpu_seconds_delta": cpu_delta,

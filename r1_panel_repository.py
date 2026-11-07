@@ -24,6 +24,7 @@ from r1_host_sampling import (discover_drives, bay_identity, read_text, temp_for
                               disk_identity, nvme_identity, bay_states)
 from r1_panel_metrics import MinuteMetrics
 from r1_framebuffer import write_frame
+from r1_display_refresh import DisplayRefresh
 from r1_web_views import render_fans, render_information
 from r1_svg_painter import paint_svg
 
@@ -306,8 +307,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
         gesture = TouchGesture()
         state = initial_view
         next_refresh = 0
-        last_data = None
-        last_sequence = -1
+        display_refresh = DisplayRefresh()
         with mmap.mmap(fb_fd, line_length * HEIGHT, mmap.MAP_SHARED, mmap.PROT_WRITE) as framebuffer:
             def blit():
                 started_ns = time.monotonic_ns() if metrics else 0
@@ -322,40 +322,30 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     if metrics:
                         metrics.record("fb_write", time.monotonic_ns() - started_ns, succeeded)
 
-            def refresh(use_cache=False, view=None):
-                nonlocal last_data, last_sequence
+            def refresh(force=False, view=None):
                 started_ns = time.monotonic_ns() if metrics else 0
-                data, last_sequence = collector.latest()
+                data, _ = collector.latest()
                 if metrics:
                     metrics.record("collect", time.monotonic_ns() - started_ns, True)
                     metrics.observe_snapshot(data)
-                last_data = data
                 data["clock"] = time.strftime("%H:%M")
-                if (view or state) == "fans":
+                target = view or state
+                if target == "fans":
                     data["control"] = control_status()
                     data["rgb"] = rgb_status()
-                started_ns = time.monotonic_ns() if metrics else 0
-                succeeded = False
-                try:
-                    painter.draw(data, touch_mode=True, brightness=round(100 * brightness / maximum), view=view or state)
-                    succeeded = True
-                finally:
-                    if metrics:
-                        metrics.record("render", time.monotonic_ns() - started_ns, succeeded)
-                blit()
-                # getty@tty2 can start after the first chvt and re-enable its
-                # text cursor. Reassert the per-VT hide after every redraw.
-                set_tty2_cursor(False)
+                if display_refresh.refresh(painter, data, target, blit, force=force, metrics=metrics):
+                    # Reassert per-VT cursor hiding after every actual redraw.
+                    set_tty2_cursor(False)
 
             def show_dashboard(target):
                 if state in ("panel", "fans"):
-                    refresh(use_cache=True, view=target)
+                    refresh(force=True, view=target)
                     return
                 if state == "off":
                     # Keep tty2 and the DSI link active while the backlight is
                     # dark. Re-enabling fb_blank can freeze this panel on a
                     # stale tty1 frame (i915 video_mode == 3 warning).
-                    refresh(use_cache=True, view=target)
+                    refresh(force=True, view=target)
                     (backlight / "brightness").write_text(str(brightness))
                     blit()
                     return
@@ -367,7 +357,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                 fb_blank.write_text("0")
                 (backlight / "bl_power").write_text("0")
                 time.sleep(0.12)
-                refresh(use_cache=True, view=target)
+                refresh(force=True, view=target)
                 (backlight / "brightness").write_text(str(brightness))
                 blit()
 
@@ -414,7 +404,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     if state != "off":
                         (backlight / "brightness").write_text(str(brightness))
                     if state in ("panel", "fans"):
-                        refresh(use_cache=True)
+                        refresh()
                 elif action == "swipe_horizontal":
                     transition(shifted_state(state, value))
                 elif action == "tap":
@@ -425,15 +415,13 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         if enabled != (rgb_action == "on"):
                             enabled = RGB.toggle()
                         remember_rgb_state(None)
-                        if last_data is not None:
-                            last_data["rgb"] = enabled
-                        refresh(use_cache=True)
+                        refresh()
                         next_refresh = time.monotonic() + 1
                     elif mode is not None:
                         if not control_status()["live"]:
                             raise RuntimeError("fan controller offline")
                         request_mode(mode)
-                        refresh(use_cache=True)
+                        refresh()
                         next_refresh = time.monotonic() + 1
                 else:
                     raise ValueError("unknown panel action")
@@ -462,7 +450,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     if state != "off":
                         (backlight / "brightness").write_text(str(brightness))
                     if state in ("panel", "fans"):
-                        refresh(use_cache=True)
+                        refresh()
                 elif action == "rgb":
                     if (not isinstance(value, list) or len(value) != 4
                             or any(type(v) is not int for v in value)):
@@ -473,10 +461,8 @@ def run_touch(painter, initial_view="panel", metrics=None):
                             raise ValueError("color and effect modes await visual verification")
                     actual = RGB.set_state(*value)
                     remember_rgb_state(actual)
-                    if last_data is not None:
-                        last_data["rgb"] = actual[0] != 0
                     if state == "fans":
-                        refresh(use_cache=True)
+                        refresh()
                     return {"ok": True, "state": state, "rgb": actual}
                 elif action == "rgb_state":
                     if value is not None:
@@ -529,8 +515,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                                 print(f"gesture={action} error={error}", flush=True)
                     if state in ("panel", "fans") and time.monotonic() >= next_refresh:
                         delay = refresh_delay()
-                        _, sequence = collector.latest()
-                        refresh(use_cache=delay == 1 and sequence == last_sequence)
+                        refresh()
                         next_refresh = time.monotonic() + delay
             finally:
                 fb_blank.write_text("0")
