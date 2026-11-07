@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与曲线控制，全速模式 60 秒自动回落
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 129 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
+- 当前源码的 148 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
 
 ### 尚未验证
 
@@ -235,6 +235,9 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | 文件 | 作用 |
 | --- | --- |
 | `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py` | 前屏主程序、绘制与运行时状态 |
+| `r1_host_sampling.py` / `r1_storage_queries.py` | 主机只读采样、严格 SSH 与容量查询；由共享采集器统一调度 |
+| `r1_snapshot.py` / `r1_display_refresh.py` / `r1_public_frames.py` | 快照契约、实体屏内容缓存与公共 PNG 按需编码 |
+| `r1_rgb_io.py` | 正式 RGB 控制与兼容试验入口共用的底层接口 |
 | `r1_collection.py` | 共享只读采集、原子快照、独立数据有效期及换盘失效保护 |
 | `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha / Latte） |
 | `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |

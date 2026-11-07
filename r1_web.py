@@ -39,6 +39,7 @@ from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
 from r1_web_views import render_fans, render_information
 from r1_collection import read_snapshot
 from r1_svg_painter import paint_svg
+from r1_public_frames import PngCache
 from r1_theme import load_theme, save_theme
 
 
@@ -307,20 +308,54 @@ def public_snapshot() -> dict:
 
 
 def collect_public_frames() -> dict:
-    """Render two independent images in memory; never touch the physical display."""
+    """Publish only SVGs; PNG rasterization is deferred until a request needs it."""
     data = public_snapshot()
+    freshness = data.get('freshness')
+    if freshness is not None and not freshness.get('valid'):
+        raise RuntimeError('shared display unavailable')
     frames = {"panel_svg": render_information(data, web_layout=True),
               "fans_svg": render_fans(data, web_layout=True)}
-    for view in ("panel", "fans"):
-        painter = panel_repo.Painter()
-        try:
-            paint_svg(painter, frames[view + "_svg"])
-            pixels, stride = painter.pixels()
-            frames[view] = rgb_png(pixels, stride)
-        finally:
-            painter.close()
-    frames["updated"] = time.time()
+    frames['groups'] = dict((freshness or {}).get('groups', {}))
+    frames['updated'] = time.time()
     return frames
+
+
+def encode_public_png(svg):
+    painter = panel_repo.Painter()
+    try:
+        paint_svg(painter, svg)
+        pixels, stride = painter.pixels()
+        return rgb_png(pixels, stride)
+    finally:
+        painter.close()
+
+
+PUBLIC_PNG = PngCache(encode_public_png)
+
+
+def public_image(view, svg=False):
+    """Validate before and after expensive work; a cache hit never renews health."""
+    def current():
+        frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
+        if (not 0 <= time.time() - frames.get('updated', 0) <= 45
+                or frames.get('freshness', {}).get('valid') is False
+                or view + '_svg' not in frames):
+            raise RuntimeError('public display unavailable')
+        # The frame worker runs every 15s; a bounded file read also catches a
+        # collector failure/expired group between those refreshes, without queries.
+        groups = frames.get('groups')
+        if groups is not None:
+            health = read_snapshot().get('freshness', {})
+            if not health.get('valid') or health.get('groups', {}) != groups:
+                raise RuntimeError('shared display unavailable')
+        return frames[view + '_svg']
+
+    for _ in range(2):
+        source = current()
+        result = source if svg else PUBLIC_PNG.get(view, source)
+        if current() == source:
+            return result
+    raise RuntimeError('public display changed during encoding')
 
 
 def client_allowed(address: str) -> bool:
@@ -550,14 +585,14 @@ class Handler(BaseHTTPRequestHandler):
             if not PUBLIC_READONLY and self._session() is None:
                 self._json(401, {"error": "login required"})
                 return
-            frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
             view = "panel" if "/panel." in path else "fans"
             svg = path.endswith(".svg")
-            key = view + ("_svg" if svg else "")
-            if time.time() - frames.get("updated", 0) > 45 or key not in frames:
+            try:
+                image = public_image(view, svg=svg)
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
                 self._json(503, {"error": "public display unavailable"})
                 return
-            self._send(200, frames[key], "image/svg+xml" if svg else "image/png")
+            self._send(200, image, "image/svg+xml" if svg else "image/png")
             return
         session = self._session()
         if session is None:
@@ -568,7 +603,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 active_curves = load()
                 curve_error = None
-            except (OSError, ValueError, KeyError, TypeError) as error:
+            except (OSError, ValueError, KeyError, TypeError):
                 active_curves = DEFAULT
                 curve_error = "curve configuration unavailable"
                 _web_log("operation_error curve_read")
@@ -585,14 +620,14 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 self._send(200, capture_frame(panel["state"]), "image/png")
-            except (OSError, RuntimeError, ValueError) as error:
+            except (OSError, RuntimeError, ValueError):
                 _web_log("operation_error capture")
                 self._json(503, {"error": "capture unavailable"})
         elif path == "/api/rgb":
             try:
                 response = request({"action": "rgb_state", "value": None})
                 self._json(200, response) if response.get("ok") else self._json(503, {"error": "RGB unavailable"})
-            except (OSError, ValueError) as error:
+            except (OSError, ValueError):
                 _web_log("operation_error rgb_read")
                 self._json(503, {"error": "RGB unavailable"})
         else:
@@ -702,7 +737,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, result) if result.get("ok") else self._json(400, {"error": "RGB command rejected"})
             else:
                 self._json(404, {"error": "not found"})
-        except (OSError, RuntimeError, ValueError, TypeError) as error:
+        except (OSError, RuntimeError, ValueError, TypeError):
             _web_log("operation_error command")
             self._json(400, {"error": "command rejected or unavailable"})
 

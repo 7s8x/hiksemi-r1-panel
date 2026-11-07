@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from r1_web import (FAILURES, Handler, LOG_ENABLED, WEB_LOG_FILE, _sanitize_access_path, _web_log, SESSIONS, change_admin_password, client_allowed,
+from r1_web import (FAILURES, Handler, _sanitize_access_path, _web_log, SESSIONS, change_admin_password, client_allowed,
                     collect_public_frames, hash_password, public_snapshot, rgb_png,
                     verify_password)  # noqa: E402
 from r1_panel_repository import WIDTH, HEIGHT  # noqa: E402
@@ -78,11 +78,9 @@ class WebTests(unittest.TestCase):
               patch("r1_web.capture_frame", side_effect=AssertionError("physical framebuffer used"))):
             result = collect_public_frames()
         self.assertEqual(FakePainter.views, [])
-        self.assertEqual(rasterize.call_count, 2)
-        self.assertEqual([call.args[1] for call in rasterize.call_args_list],
-                         [result["panel_svg"], result["fans_svg"]])
-        self.assertEqual(result["panel"], b"PNG")
-        self.assertEqual(result["fans"], b"PNG")
+        self.assertEqual(rasterize.call_count, 0)
+        self.assertNotIn('panel', result)
+        self.assertNotIn('fans', result)
         self.assertIn(b"<svg", result["panel_svg"])
         self.assertIn(b"<svg", result["fans_svg"])
         self.assertIn(b"height=\"633\"", result["panel_svg"])
@@ -175,7 +173,7 @@ class WebTests(unittest.TestCase):
         thread.start()
         base = f"http://127.0.0.1:{server.server_port}"
         try:
-            with patch("r1_web.PUBLIC_COLLECTOR", FakeCollector()), patch.dict(SESSIONS, {}, clear=True):
+            with patch("r1_web.PUBLIC_COLLECTOR", FakeCollector()), patch("r1_web.PUBLIC_PNG.get", side_effect=lambda view, source: view.encode() + b" PNG"), patch.dict(SESSIONS, {}, clear=True):
                 for name, expected in (("panel", b"panel PNG"), ("fans", b"fans PNG")):
                     with urlopen(base + f"/public/{name}.png", timeout=2) as response:
                         self.assertEqual(response.headers.get_content_type(), "image/png")

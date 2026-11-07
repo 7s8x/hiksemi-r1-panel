@@ -203,5 +203,3 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
                                     if remaining is not None else "全速运行")
     template = "r1_web_fans_web.svg"
     return theme_svg(_template(template, values), theme)
-
-
