@@ -10,8 +10,16 @@ import r1_panel_repository as panel
 
 class TouchRefreshFlowTests(unittest.TestCase):
     def test_page_off_and_console_returns_force_refresh_without_real_devices(self):
+        self.exercise_pages(cache_hit=False)
+
+    def test_cache_hit_still_hides_cursor_without_another_snapshot_read(self):
+        self.exercise_pages(cache_hit=True)
+
+    def exercise_pages(self, *, cache_hit):
         pages = iter(('fans', 'console', 'off', 'panel', 'console', 'panel'))
         commands = [{'action': 'page', 'value': page} for page in pages]
+        if cache_hit:
+            commands.insert(0, {'action': 'brightness', 'value': 55})
         position = 0
         connection = Mock()
         context = Mock()
@@ -41,7 +49,13 @@ class TouchRefreshFlowTests(unittest.TestCase):
         reader, painter, display = Mock(), Mock(), Mock()
         reader.latest.side_effect = lambda: (copy.deepcopy({'freshness': {'valid': True}}), 1)
         painter.pixels.return_value = (b'pixels', 4)
-        display.refresh.return_value = True
+        events = []
+        results = iter([True, False, True, True, True] if cache_hit else [True] * 4)
+        def refresh(*args, **kwargs):
+            result = next(results)
+            events.append(('refresh', result))
+            return result
+        display.refresh.side_effect = refresh
         mapping = Mock()
         mapping.__enter__ = Mock(return_value=None)
         mapping.__exit__ = Mock(return_value=False)
@@ -67,10 +81,20 @@ class TouchRefreshFlowTests(unittest.TestCase):
                 patch.object(panel.select, 'select', side_effect=select),
                 patch.object(panel.time, 'sleep'),
             ]
-            for change in changes: stack.enter_context(change)
+            mocks = [stack.enter_context(change) for change in changes]
+            hide_cursor = mocks[13]
+            hide_cursor.side_effect = lambda visible: events.append(('cursor', visible))
             panel.run_touch(painter, initial_view='panel')
         calls = display.refresh.call_args_list
-        self.assertEqual([call.args[2] for call in calls], ['panel', 'fans', 'panel', 'panel'])
-        self.assertEqual([call.kwargs['force'] for call in calls], [False, True, True, True])
+        self.assertEqual([call.args[2] for call in calls],
+                         ['panel', 'panel', 'fans', 'panel', 'panel'] if cache_hit else ['panel', 'fans', 'panel', 'panel'])
+        self.assertEqual([call.kwargs['force'] for call in calls],
+                         [False, False, True, True, True] if cache_hit else [False, True, True, True])
+        # Startup/VT transitions also hide the cursor; verify each refresh itself.
+        for index, event in enumerate(events):
+            if event[0] == 'refresh':
+                self.assertEqual(events[index + 1], ('cursor', False))
+        if cache_hit:
+            self.assertIn(('refresh', False), events)
         self.assertEqual(reader.latest.call_count, len(calls))
         reader.stop.assert_called_once()

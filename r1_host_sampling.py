@@ -6,7 +6,11 @@ from pathlib import Path
 import re
 import subprocess
 
-from r1_site_config import discover_bays, bay_states
+# Explicit compatibility exports; callers may use these module attributes.
+from r1_site_config import (
+    discover_bays as discover_bays,
+    bay_states as bay_states,
+)
 
 _CPU_SAMPLE = None
 

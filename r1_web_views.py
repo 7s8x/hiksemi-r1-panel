@@ -9,7 +9,11 @@ from xml.sax.saxutils import escape
 
 from r1_theme import theme_svg
 from r1_site_config import SITE
-from r1_host_sampling import system_identity, drive_models
+# Explicit compatibility exports; callers may use these module attributes.
+from r1_host_sampling import (
+    system_identity as system_identity,
+    drive_models as drive_models,
+)
 
 
 ROOT = Path(__file__).resolve().parent

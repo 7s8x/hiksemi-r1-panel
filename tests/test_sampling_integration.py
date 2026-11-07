@@ -92,3 +92,58 @@ class SamplingIntegrationTests(unittest.TestCase):
         self.assertEqual(sample.temperature('coretemp'), 51)
         self.assertEqual(sample.temperatures(self.disks, self.states), self.controller_basis())
         self.assertEqual(sample.temperatures(self.disks, self.states), (None, None, 0))
+
+
+    def assert_same_basis(self, expected):
+        actual = self.sample().temperatures(self.disks, self.states)
+        self.assertEqual(actual, self.controller_basis())
+        self.assertEqual(actual, expected)
+
+    def test_cpu_temperature_inclusive_boundaries_match_controller(self):
+        (self.cpu / 'temp2_input').write_text('0')
+        for milli, expected in ((-1, (None, None, 0)), (0, (0, 35, 1)),
+                                (105000, (105, 35, 1)), (105001, (None, None, 0))):
+            with self.subTest(milli=milli):
+                (self.cpu / 'temp1_input').write_text(str(milli))
+                self.assert_same_basis(expected)
+
+    def test_drive_temperature_inclusive_boundaries_match_controller(self):
+        for milli, expected in ((-1, (57, None, -1)), (0, (57, 0, 1)),
+                                (80000, (57, 80, 1)), (80001, (57, None, -1))):
+            with self.subTest(milli=milli):
+                (self.drive / 'temp1_input').write_text(str(milli))
+                self.assert_same_basis(expected)
+
+    def test_duplicate_drive_sensor_is_rejected_with_valid_temperatures(self):
+        self.assert_same_basis((57, 35, 1))
+        extra = self.sensor('hwmon3', 'drivetemp', {'temp1_input': 37000})
+        (extra / 'device').symlink_to(self.device, target_is_directory=True)
+        self.assert_same_basis((57, None, -1))
+
+    def test_unassigned_extra_sensor_is_rejected_with_valid_temperatures(self):
+        extra = self.sensor('hwmon3', 'drivetemp', {'temp1_input': 37000})
+        other = self.root / 'unassigned-device'; other.mkdir()
+        (extra / 'device').symlink_to(other, target_is_directory=True)
+        self.assert_same_basis((57, None, -1))
+
+    def test_missing_and_unexpected_bays_match_controller(self):
+        self.disks = (('BAY 1', None),)
+        self.states = ('missing',)
+        self.assert_same_basis((57, None, -1))
+        self.disks = (('BAY 1', 'disk-a'),)
+        self.states = ('unexpected',)
+        self.site.occupied_bays = ()
+        self.assert_same_basis((57, None, -1))
+
+    def test_empty_bay_is_allowed_but_orphan_sensor_is_not(self):
+        self.disks = (('BAY 1', None),)
+        self.states = ('empty',)
+        self.site.occupied_bays = ()
+        self.assert_same_basis((57, None, -1))
+        # Rename outside the hwmon scan, preserving the fixture for auditability.
+        self.drive.rename(self.hwmon / 'detached-drive')
+        self.assert_same_basis((57, None, 0))
+
+    def test_multiple_cpu_hwmon_devices_match_controller_failure(self):
+        self.sensor('hwmon3', 'coretemp', {'temp1_input': 55000})
+        self.assert_same_basis((None, None, 0))
