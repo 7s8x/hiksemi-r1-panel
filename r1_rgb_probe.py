@@ -10,9 +10,19 @@ from __future__ import annotations
 import argparse
 import os
 
-from r1_rgb_io import (I2C_SLAVE, I2C_SMBUS, I2C_SMBUS_READ, I2C_SMBUS_BYTE_DATA,
-                       RGB_ADDRESS, REGISTERS, SmbusData, SmbusIoctlData,
-                       ioctl_checked, read_byte_data)
+# Explicit compatibility exports; callers may use these module attributes.
+from r1_rgb_io import (
+    I2C_SLAVE as I2C_SLAVE,
+    I2C_SMBUS as I2C_SMBUS,
+    I2C_SMBUS_READ as I2C_SMBUS_READ,
+    I2C_SMBUS_BYTE_DATA as I2C_SMBUS_BYTE_DATA,
+    RGB_ADDRESS as RGB_ADDRESS,
+    REGISTERS as REGISTERS,
+    SmbusData as SmbusData,
+    SmbusIoctlData as SmbusIoctlData,
+    ioctl_checked as ioctl_checked,
+    read_byte_data as read_byte_data,
+)
 
 
 def probe_bus(number: int) -> None:

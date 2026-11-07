@@ -13,5 +13,3 @@ def empty_display():
             'vms': [(f'VM {v}', 'UNKNOWN') for v in SITE.vmids],
             'fans': None, 'fan_basis': (None, None, 0), 'control': {}, 'rgb': None,
             'clock': time.strftime('%H:%M'), 'captured_at': 0}
-
-

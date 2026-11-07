@@ -64,5 +64,3 @@ def write_byte_data(fd: int, register: int, value: int) -> None:
         I2C_SMBUS_WRITE, register, I2C_SMBUS_BYTE_DATA, ctypes.pointer(data)
     )
     ioctl_checked(fd, I2C_SMBUS, ctypes.byref(operation))
-
-

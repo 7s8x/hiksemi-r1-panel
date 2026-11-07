@@ -29,3 +29,21 @@ jobs:
 
       - name: 运行受防护离线单元测试
         run: python -I -S -B run_offline_tests.py
+
+      - name: 检出已验证的渲染基线
+        uses: actions/checkout@v4
+        with:
+          ref: 0ed06323bc8373793bbc88eed487324c1d4c5ecc
+          path: render-baseline
+
+      - name: Linux模拟数据SVG及Cairo PNG等价
+        run: python -I -S -B verify_integration_render.py --baseline render-baseline
+
+      - name: 检查干净发行包与模块导入
+        env:
+          R1_TEST_PACKAGE: ${{ runner.temp }}/r1-integration-package
+        run: |
+          python -I -S -B build_release.py "$R1_TEST_PACKAGE"
+          cd "$R1_TEST_PACKAGE"
+          sha256sum --check SHA256SUMS.txt
+          python -I -S -B run_offline_tests.py

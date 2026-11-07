@@ -19,9 +19,20 @@ from r1_rgb_control import RgbControl
 from r1_panel_runtime import MAX_COMMAND, open_control, publish_state
 from r1_collection import SharedReader, read_snapshot
 from r1_site_config import SITE
-from r1_host_sampling import (discover_drives, bay_identity, read_text, temp_for_hwmon,
-                              fan_readings, drive_temperature, memory, cpu_usage,
-                              disk_identity, nvme_identity, bay_states)
+# Explicit compatibility exports; callers may use these module attributes.
+from r1_host_sampling import (
+    discover_drives as discover_drives,
+    bay_identity as bay_identity,
+    read_text as read_text,
+    temp_for_hwmon as temp_for_hwmon,
+    fan_readings as fan_readings,
+    drive_temperature as drive_temperature,
+    memory as memory,
+    cpu_usage as cpu_usage,
+    disk_identity as disk_identity,
+    nvme_identity as nvme_identity,
+    bay_states as bay_states,
+)
 from r1_panel_metrics import MinuteMetrics
 from r1_framebuffer import write_frame
 from r1_display_refresh import DisplayRefresh
@@ -333,9 +344,10 @@ def run_touch(painter, initial_view="panel", metrics=None):
                 if target == "fans":
                     data["control"] = control_status()
                     data["rgb"] = rgb_status()
-                if display_refresh.refresh(painter, data, target, blit, force=force, metrics=metrics):
-                    # Reassert per-VT cursor hiding after every actual redraw.
-                    set_tty2_cursor(False)
+                display_refresh.refresh(painter, data, target, blit, force=force, metrics=metrics)
+                # getty may re-enable its cursor between refreshes. Reassert even
+                # on a content-cache hit; skipping rasterization must not skip this.
+                set_tty2_cursor(False)
 
             def show_dashboard(target):
                 if state in ("panel", "fans"):

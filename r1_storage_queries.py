@@ -162,4 +162,5 @@ def bay_capacities(disks):
     config = _config()
     if not config:
         return [None] * len(disks)
-    return _map_guest_to_bays(disks, _host_sata(config), guest_capacity(config))
+    guest = guest_capacity(config)
+    return _map_guest_to_bays(disks, _host_sata(config), guest)
