@@ -76,6 +76,7 @@
   "tests/test_storage_usage.py",
   "tests/test_svg_contract.py",
   "tests/test_theme.py",
+  "tests/test_touch_refresh_flow.py",
   "tests/test_web.py",
   "tests/test_web_capacity.py",
   "tests/test_web_hardening.py",
