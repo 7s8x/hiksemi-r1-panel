@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from r1_rgb_probe import I2C_SLAVE, RGB_ADDRESS, ioctl_checked, read_byte_data
-from r1_rgb_trial import (REG_MODE, REG_RED, REG_GREEN, REG_BLUE,
+from r1_rgb_io import I2C_SLAVE, RGB_ADDRESS, ioctl_checked, read_byte_data
+from r1_rgb_io import (REG_MODE, REG_RED, REG_GREEN, REG_BLUE,
                           write_byte_data)
 
 

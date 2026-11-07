@@ -54,5 +54,24 @@ class PanelRuntimeTests(unittest.TestCase):
         self.assertEqual(closed.call_count, 2)
 
 
+
+class PayloadDefaultsTests(unittest.TestCase):
+    def test_public_worker_uses_empty_frames_not_panel_defaults(self):
+        from r1_panel_runtime import SnapshotCollector
+        collector = SnapshotCollector(lambda: {}, empty=dict)
+        frames, _ = collector.latest()
+        self.assertNotIn('cpu', frames)
+        self.assertNotIn('updated', frames)
+        self.assertFalse(frames['freshness']['valid'])
+
+    def test_rgb_control_does_not_import_trial_or_probe(self):
+        import ast
+        root = Path(__file__).resolve().parents[1]
+        for name in ('r1_rgb_control.py', 'r1_rgb_io.py'):
+            imports = [node.module for node in ast.walk(ast.parse((root / name).read_text()))
+                       if isinstance(node, ast.ImportFrom)]
+            self.assertNotIn('r1_rgb_trial', imports)
+            self.assertNotIn('r1_rgb_probe', imports)
+
 if __name__ == "__main__":
     unittest.main()

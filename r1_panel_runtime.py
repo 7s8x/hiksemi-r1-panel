@@ -8,7 +8,6 @@ from pathlib import Path
 import socket
 import threading
 import time
-from r1_site_config import SITE
 
 
 CONTROL_SOCKET = Path("/run/r1-panel/control.sock")
@@ -16,16 +15,13 @@ STATE_FILE = Path("/run/r1-panel/state.json")
 MAX_COMMAND = 512
 
 
-def empty_snapshot() -> dict:
-    return {"cpu": None, "nvme": None, "drives": [], "mem_total": 0,
-            "mem_used": 0, "uptime": 0, "ip": "--",
-            "vms": [(vmid, "UNKNOWN") for vmid in SITE.vmids], "fans": None,
-            "control": {}, "rgb": None, "captured_at": 0,
-            "clock": time.strftime("%H:%M")}
+# Compatibility name for older panel callers.
+from r1_snapshot import empty_display as empty_snapshot
 
 
 class SnapshotCollector:
-    def __init__(self, collect, interval: float = 15.0, observe=None, observe_snapshot=None):
+    def __init__(self, collect, interval: float = 15.0, observe=None, observe_snapshot=None, empty=empty_snapshot):
+        self.empty = empty
         self.observe = observe
         self.observe_snapshot = observe_snapshot
         self.collect = collect
@@ -49,7 +45,7 @@ class SnapshotCollector:
         with self._lock:
             age = None if self._sample_at is None else max(0, time.monotonic() - self._sample_at)
             invalid = self._failed or age is None or age > self.interval * 2
-            result = empty_snapshot() if invalid else dict(self._data)
+            result = self.empty() if invalid else dict(self._data)
             result["freshness"] = {"age_seconds": age, "valid": not invalid,
                                    "reason": "collection_failed" if self._failed else "expired" if invalid else "fresh"}
             return result, self._sequence
@@ -72,7 +68,7 @@ class SnapshotCollector:
                         self.observe_snapshot(data)
                     except Exception:
                         print("snapshot_metrics_error=observation_failed", flush=True)
-            except Exception as error:
+            except Exception:
                 with self._lock:
                     self._failed = True
                     self._sequence += 1

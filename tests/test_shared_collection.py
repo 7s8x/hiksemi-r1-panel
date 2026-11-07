@@ -117,13 +117,13 @@ class CollectionTests(unittest.TestCase):
                 self.assertIsNone(shared.read_snapshot(path)['cpu'])
 
     def test_nvme_refresh_cannot_query_dsm(self):
-        with patch('r1_web_capacity._nvme_capacity', return_value=(1, 9, 10)) as nvme, \
-             patch('r1_web_capacity._guest_capacity', side_effect=AssertionError('unexpected SSH')):
+        with patch('r1_storage_queries.nvme_capacity', return_value=(1, 9, 10)) as nvme, \
+             patch('r1_storage_queries.guest_capacity', side_effect=AssertionError('unexpected SSH')):
             self.assertEqual(shared.collect_slow('nvme', ()), {'capacity': [(1, 9, 10)]})
         nvme.assert_called_once_with()
 
     def test_fast_path_never_executes_external_commands(self):
-        import r1_panel_repository as panel
+        import r1_host_sampling as panel
         with patch('subprocess.run', side_effect=AssertionError('fast path spawned process')), \
              patch.object(panel, 'discover_drives', return_value=()), \
              patch.object(panel, 'read_text', return_value='100 0'), \
