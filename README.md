@@ -96,8 +96,8 @@ systemctl enable r1-panel.service r1-fan-curve.service r1-web.service r1-collect
 
 - `r1-fan-curve.service` — 温控，最先启动，停止时按传感器、盘位和温度安全条件设置 120 或保留全速，不保证交回 BIOS 自动模式
 - `r1-collector.service` — 共享只读采集，温度/负载每 5 秒、VM 每 60 秒、NVMe 容量每 300 秒、可选群晖容量每 1800 秒；独立于温控
-- `r1-panel.service` — 前屏，依赖温控，启动前跑 `r1_panel_preflight.sh` 等屏幕就绪
-- `r1-web.service` — Web，依赖前两者，已做 `ProtectSystem` / `DevicePolicy` 等沙箱限制
+- `r1-panel.service` — 前屏，依赖温控与共享采集器，启动前跑 `r1_panel_preflight.sh` 等屏幕就绪
+- `r1-web.service` — Web，依赖前屏、温控与共享采集器，已做 `ProtectSystem` / `DevicePolicy` 等沙箱限制
 
 ### 4. 初始化 Web
 
@@ -200,13 +200,13 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与曲线控制，全速模式 60 秒自动回落
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 70 项离线单元测试（`python -m unittest discover -s tests -v`）
+- 当前源码的 129 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
 
 ### 尚未验证
 
 - **整机重启后的前屏显示**：部分版本未复测，早期出现过 i915/DSI 旧帧故障
 - **长时间热循环与内核升级兼容性**：`it87` 是固定版本构建，内核一变就要重来
-- **Web 控制台页的反向切页**：从黑屏反向进入控制台只显示光标，因此该切页按钮仍禁用
+- **目标机器的显示链路兼容性**：Web 已提供控制台切页入口，但不能据此保证每台机器的黑屏唤醒或控制台恢复；升级后仍须现场复核
 
 ### 明确不做
 
@@ -235,11 +235,12 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | 文件 | 作用 |
 | --- | --- |
 | `r1_panel_next.py` / `r1_panel_repository.py` / `r1_panel_runtime.py` | 前屏主程序、绘制与运行时状态 |
-| `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha） |
+| `r1_collection.py` | 共享只读采集、原子快照、独立数据有效期及换盘失效保护 |
+| `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha / Latte） |
 | `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |
 | `r1_rgb_control.py` / `r1_rgb_probe.py` | RGB 控制与定点探测 |
-| `r1_web.py` / `r1_web.html` / `r1_web_views.py` / `r1_web_capacity.py` | HTTP/HTTPS 服务与页面渲染 |
-| `r1_storage_usage.py` / `r1_dsm_usage.sh` | 群晖只读占用率采集 |
+| `r1_web.py` / `r1_web.html` / `r1_web_views.py` | HTTP/HTTPS 服务与共享画面渲染，PNG 复用已生成的 SVG |
+| `r1_storage_usage.py` / `r1_web_capacity.py` / `r1_dsm_usage.sh` | 受限 SSH、盘位映射与容量查询；由共享采集器统一调度，不再维护旧的独立容量缓存 |
 | `*.service` | systemd 服务定义 |
 | `r1_panel_preflight.sh` / `r1_panel_restore_tty.sh` / `load_it87_for_curve.sh` | 启动前置检查、控制台恢复、驱动加载 |
 | `tests/` | 不接触硬件的离线测试 |
