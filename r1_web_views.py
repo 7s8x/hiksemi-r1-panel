@@ -113,8 +113,7 @@ def render_information(data: dict, *, web_layout: bool = True, theme: str | None
                   CPU_USAGE=f"{round(usage)}%" if usage is not None else "--",
                   CPU_TEMP=cpu_temp, CPU_TEMP_UNIT=cpu_unit,
                   MEM_USED=f"{used:.1f}" if used is not None else "--",
-                  MEM_TOTAL=f"{total:.0f}" if total is not None else "--",
-                  DRIVE_COUNT=5)
+                  MEM_TOTAL=f"{total:.0f}" if total is not None else "--")
     states = list(data.get("bay_states") or [])
     storage = list(data.get("storage") or [])
     models = list(data.get("storage_models") or [])

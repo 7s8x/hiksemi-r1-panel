@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import select
 import signal
-import socket
 import struct
 import subprocess
 import time
@@ -20,14 +19,10 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_rgb_control import RgbControl
 from r1_panel_runtime import MAX_COMMAND, open_control, publish_state
 from r1_collection import SharedReader, read_snapshot
-from r1_storage_usage import storage_usage
 from r1_site_config import SITE, discover_bays, bay_states
 from r1_panel_metrics import MinuteMetrics
 from r1_framebuffer import write_frame
-from r1_vm_status import vm_statuses
-from r1_web_capacity import storage_capacity
-from r1_web_views import drive_models, render_fans, render_information, system_identity
-from r1_fan_curve import temperatures as fan_temperatures
+from r1_web_views import render_fans, render_information
 from r1_svg_painter import paint_svg
 
 
@@ -203,65 +198,6 @@ def nvme_identity():
     size = f"{capacity / 1000:.0f}TB" if capacity >= 1000 else f"{capacity:.0f}GB" if capacity else "--"
     controller = name.rsplit("n", 1)[0]
     return size, "NVME", read_text(Path("/sys/class/nvme", controller, "serial")) or "--"
-
-
-def vm_status(vmid):
-    try:
-        result = subprocess.run(
-            ["qm", "status", str(vmid)], capture_output=True, text=True,
-            timeout=4, check=True,
-        )
-        return result.stdout.strip().removeprefix("status: ").upper()
-    except (OSError, subprocess.SubprocessError):
-        return "UNKNOWN"
-
-
-def network_address():
-    try:
-        result = subprocess.run(
-            ["ip", "-4", "-o", "addr", "show", "dev", "vmbr0"],
-            capture_output=True, text=True, timeout=3, check=True,
-        )
-        for part in result.stdout.split():
-            if part.startswith("192.") or part.startswith("10.") or part.startswith("172."):
-                return part.split("/")[0]
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return "--"
-
-
-def snapshot(*, disks=None, usage=None):
-    total, used = memory()
-    disks = discover_drives() if disks is None else disks
-    usage = storage_usage(disks) if usage is None else usage
-    vms = vm_statuses()
-    disk_readings = [(label, bay_identity(label, disk),
-                      drive_temperature(disk) if disk is not None else None)
-                     for label, disk in disks]
-    try:
-        uptime = int(float(read_text("/proc/uptime").split()[0]))
-    except (ValueError, IndexError):
-        uptime = 0
-    return {
-        "cpu": temp_for_hwmon("coretemp"),
-        "cpu_usage": cpu_usage(),
-        "nvme": temp_for_hwmon("nvme"),
-        "drives": [(label, temperature) for label, identity, temperature in disk_readings
-                   if identity[1] != "UNVERIFIED"],
-        "storage": [(nvme_identity(), temp_for_hwmon("nvme"))] +
-                   [(identity, temperature) for _, identity, temperature in disk_readings],
-        "storage_usage": usage,
-        "mem_total": total,
-        "mem_used": used,
-        "uptime": uptime,
-        "ip": network_address(),
-        "vms": list(vms.items()),
-        "fans": fan_readings(),
-        "control": control_status(),
-        "rgb": rgb_status(),
-        "captured_at": time.monotonic(),
-        "clock": time.strftime("%H:%M"),
-    }
 
 
 def screen_snapshot():

@@ -23,7 +23,6 @@ import re
 import os
 from pathlib import Path
 import secrets
-import socket
 import ssl
 import struct
 import subprocess
@@ -32,7 +31,7 @@ import time
 from urllib.parse import urlsplit
 import zlib
 
-from r1_fan_config import CONFIG_FILE, DEFAULT, digest, load, save, validate
+from r1_fan_config import DEFAULT, digest, load, save, validate
 from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
@@ -315,10 +314,7 @@ def collect_public_frames() -> dict:
     for view in ("panel", "fans"):
         painter = panel_repo.Painter()
         try:
-            if view == "panel":
-                paint_svg(painter, frames["panel_svg"])
-            else:
-                painter.draw(data, view=view)
+            paint_svg(painter, frames[view + "_svg"])
             pixels, stride = painter.pixels()
             frames[view] = rgb_png(pixels, stride)
         finally:
