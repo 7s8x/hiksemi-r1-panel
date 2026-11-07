@@ -98,3 +98,15 @@ class TouchRefreshFlowTests(unittest.TestCase):
             self.assertIn(('refresh', False), events)
         self.assertEqual(reader.latest.call_count, len(calls))
         reader.stop.assert_called_once()
+
+
+    def test_touchscreen_discovery_uses_device_name_not_event_number(self):
+        with patch.object(panel.glob, 'glob', return_value=['/sys/class/input/event2', '/sys/class/input/event9']), \
+             patch.object(panel, 'read_text', side_effect=['other input', 'CST0836:00 0911:5288']):
+            self.assertEqual(panel.touchscreen_path(), '/dev/input/event9')
+
+    def test_touchscreen_discovery_rejects_missing_matching_device(self):
+        with patch.object(panel.glob, 'glob', return_value=['/sys/class/input/event2']), \
+             patch.object(panel, 'read_text', return_value='other input'):
+            with self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
+                panel.touchscreen_path()
