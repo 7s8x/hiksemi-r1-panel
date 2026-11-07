@@ -132,7 +132,7 @@ class CollectionTests(unittest.TestCase):
              patch.object(panel, 'temp_for_hwmon', return_value=45), \
              patch.object(panel, 'nvme_identity', return_value=('1TB', 'NVME', 'private')), \
              patch.object(panel, 'fan_readings', return_value=None), \
-             patch('r1_fan_curve.temperatures', return_value=(45, None, 0)):
+             patch('r1_host_sampling.HwmonSample.temperatures', return_value=(45, None, 0)):
             result, _, _ = shared.collect_fast()
         self.assertEqual(result['cpu_usage'], 28)
 

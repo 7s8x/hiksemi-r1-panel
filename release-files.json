@@ -66,6 +66,7 @@
   "tests/test_panel_runtime.py",
   "tests/test_render_performance.py",
   "tests/test_rgb.py",
+  "tests/test_sampling_integration.py",
   "tests/test_shared_collection.py",
   "tests/test_site_config.py",
   "tests/test_storage_usage.py",

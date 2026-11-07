@@ -121,7 +121,6 @@ def collect_fast():
     import r1_host_sampling as panel
     from r1_storage_queries import disk_generation
     from r1_host_sampling import drive_models
-    from r1_fan_curve import temperatures
     disks = panel.discover_drives()
     generation = disk_generation(disks)
     nvmes = sorted(Path('/sys/block').glob('nvme*n*'))
@@ -130,17 +129,19 @@ def collect_fast():
         nvme_generation.append((device.name, panel.read_text(device / 'diskseq'),
                                 panel.read_text(device / 'size')))
     token = [generation, nvme_generation] if generation is not None else None
+    sensors = panel.HwmonSample()
+    states = panel.bay_states(disks)
     total, used = panel.memory()
-    uptime = float(panel.read_text('/proc/uptime').split()[0])
-    nvme_temp = panel.temp_for_hwmon('nvme')
+    uptime = panel.uptime()
+    nvme_temp = panel.temp_for_hwmon('nvme', sample=sensors)
     rows = [(label, panel.bay_identity(label, disk),
-             panel.drive_temperature(disk) if disk else None) for label, disk in disks]
-    data = {'cpu': panel.temp_for_hwmon('coretemp'), 'cpu_usage': panel.cpu_usage(),
-            'mem_total': total, 'mem_used': used, 'uptime': int(uptime), 'nvme': nvme_temp,
+             panel.drive_temperature(disk, sample=sensors) if disk else None) for label, disk in disks]
+    data = {'cpu': panel.temp_for_hwmon('coretemp', sample=sensors), 'cpu_usage': panel.cpu_usage(),
+            'mem_total': total, 'mem_used': used, 'uptime': uptime, 'nvme': nvme_temp,
             'storage': [(panel.nvme_identity(), nvme_temp)] + [(i, t) for _, i, t in rows],
-            'drives': [(label, t) for label, _, t in rows], 'fans': panel.fan_readings(),
-            'storage_models': drive_models(disks), 'bay_states': panel.bay_states(disks),
-            'fan_basis': temperatures(disks=disks)}
+            'drives': [(label, t) for label, _, t in rows], 'fans': panel.fan_readings(sample=sensors),
+            'storage_models': drive_models(disks), 'bay_states': states,
+            'fan_basis': sensors.temperatures(disks, states)}
     # Normalize once so in-memory generations compare exactly like JSON generations.
     return data, json.loads(json.dumps(token)), tuple(disks)
 

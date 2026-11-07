@@ -45,7 +45,7 @@ class DiskDiscoveryTests(unittest.TestCase):
     def test_fast_collection_refreshes_disk_list_between_samples(self):
         with (patch("r1_host_sampling.discover_drives", side_effect=[(("BAY 1", "old"),), (("BAY 1", "new"),)]),
               patch("r1_host_sampling.disk_identity", side_effect=lambda disk: ("1TB", "HDD", disk)),
-              patch("r1_host_sampling.drive_temperature", side_effect=lambda disk: 32 if disk == "old" else 36),
+              patch("r1_host_sampling.drive_temperature", side_effect=lambda disk, **_: 32 if disk == "old" else 36),
               patch("r1_storage_queries.disk_generation", side_effect=[("old",), ("new",)]),
               patch("r1_host_sampling.memory", return_value=(16, 8)),
               patch("r1_host_sampling.read_text", return_value="3600.0"),
@@ -54,7 +54,7 @@ class DiskDiscoveryTests(unittest.TestCase):
               patch("r1_host_sampling.cpu_usage", return_value=20),
               patch("r1_host_sampling.fan_readings", return_value=None),
               patch("r1_host_sampling.drive_models", return_value=[]),
-              patch("r1_fan_curve.temperatures", return_value=(42, 36, 1)),
+              patch("r1_host_sampling.HwmonSample.temperatures", return_value=(42, 36, 1)),
               patch("subprocess.run", side_effect=AssertionError("fast path queried host"))):
             first, generation1, _ = collect_fast()
             second, generation2, _ = collect_fast()
