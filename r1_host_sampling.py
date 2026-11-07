@@ -1,7 +1,6 @@
 """Read-only host sampling, independent of renderers and display controls."""
 from __future__ import annotations
 
-import glob
 import os
 from pathlib import Path
 import re
@@ -19,7 +18,10 @@ def discover_drives(block_root=Path("/sys/block"), by_id_root=Path("/dev/disk/by
 def bay_identity(label, disk):
     if disk is None:
         return label, "UNVERIFIED", "--"
-    size, kind, serial = disk_identity(disk)
+    try:
+        size, kind, serial = disk_identity(disk)
+    except (OSError, RuntimeError, ValueError):
+        return label, "UNVERIFIED", "--"
     return f"{label}  {size}", kind, serial
 
 
@@ -30,58 +32,129 @@ def read_text(path):
         return ""
 
 
-def temp_for_hwmon(name):
-    for path in glob.glob("/sys/class/hwmon/hwmon*"):
-        if read_text(path + "/name") == name:
+class HwmonSample:
+    """One topology scan and one read per sensor file, never reused across samples."""
+    def __init__(self, root=Path('/sys/class/hwmon'), *,
+                 block_root=Path('/sys/block'), by_id_root=Path('/dev/disk/by-id')):
+        self.block_root, self.by_id_root = block_root, by_id_root
+        self.index, self.values, self.devices = {}, {}, {}
+        for path in root.glob('hwmon*'):
+            name = read_text(path / 'name')
+            if name:
+                self.index.setdefault(name, []).append(path)
+        for path in self.index.get('drivetemp', []):
             try:
-                return int(read_text(path + "/temp1_input")) / 1000
-            except ValueError:
-                pass
-    return None
+                device = (path / 'device').resolve(strict=True)
+                self.devices.setdefault(device, []).append(path)
+            except (OSError, RuntimeError):
+                continue
 
+    def number(self, path):
+        if path not in self.values:
+            try:
+                self.values[path] = int(path.read_text().strip())
+            except (OSError, ValueError):
+                self.values[path] = None
+        return self.values[path]
 
-def fan_readings(hwmon_root=Path("/sys/class/hwmon")):
-    """Read the verified IT8613E fan channels; never change PWM or modes."""
-    matches = [path for path in hwmon_root.glob("hwmon*")
-               if read_text(path / "name") == "it8613"]
-    if len(matches) != 1:
+    def temperature(self, name):
+        for path in self.index.get(name, []):
+            value = self.number(path / 'temp1_input')
+            if value is not None:
+                return value / 1000
         return None
-    path = matches[0]
-    values = {}
-    for channel in (2, 3):
-        for node in (f"fan{channel}_input", f"pwm{channel}", f"pwm{channel}_enable"):
-            try:
-                values[node] = int(read_text(path / node))
-            except ValueError:
+
+    def drive_paths(self, disk):
+        if disk is None:
+            return []
+        try:
+            block = (self.by_id_root / disk).resolve(strict=True)
+            device = (self.block_root / block.name / 'device').resolve(strict=True)
+            return self.devices.get(device, [])
+        except (OSError, RuntimeError):
+            return []
+
+    def drive_temperature(self, disk):
+        matches = self.drive_paths(disk)
+        value = self.number(matches[0] / 'temp1_input') if matches else None
+        return value / 1000 if value is not None else None
+
+    def fans(self):
+        matches = self.index.get('it8613', [])
+        if len(matches) != 1:
+            return None
+        values = {}
+        for channel in (2, 3):
+            for node in (f'fan{channel}_input', f'pwm{channel}', f'pwm{channel}_enable'):
+                value = self.number(matches[0] / node)
+                if value is None:
+                    return None
+                values[node] = value
+            if not 0 <= values[f'fan{channel}_input'] <= 20000:
                 return None
-        if not (0 <= values[f"fan{channel}_input"] <= 20000):
-            return None
-        if not (0 <= values[f"pwm{channel}"] <= 255):
-            return None
-    return values
+            if not 0 <= values[f'pwm{channel}'] <= 255:
+                return None
+        return values
+
+    def temperatures(self, disks, states):
+        """Display-only fan basis, preserving the independent controller's checks."""
+        matches = self.index.get('coretemp', [])
+        if len(matches) != 1:
+            return None, None, 0
+        values = [self.number(path) for path in matches[0].glob('temp*_input')]
+        if not values or any(v is None or not 0 <= v <= 105000 for v in values):
+            return None, None, 0
+        cpu = max(values) / 1000
+        if any(state in ('missing', 'unexpected') for state in states):
+            return cpu, None, -1
+        drives = []
+        for (_, disk), state in zip(disks, states):
+            if state == 'empty':
+                continue
+            matches = self.drive_paths(disk)
+            if len(matches) != 1:
+                return cpu, None, -1
+            value = self.number(matches[0] / 'temp1_input')
+            if value is None or not 0 <= value <= 80000:
+                return cpu, None, -1
+            drives.append(value / 1000)
+        if sum(len(paths) for paths in self.devices.values()) != len(drives):
+            return cpu, None, -1
+        return cpu, max(drives) if drives else None, len(drives)
 
 
-def drive_temperature(by_id):
-    disk = Path("/dev/disk/by-id", by_id).resolve()
-    if not disk.exists():
-        return None
-    device = Path("/sys/block", disk.name, "device").resolve()
-    for path in glob.glob("/sys/class/hwmon/hwmon*"):
-        if read_text(path + "/name") == "drivetemp" and Path(path, "device").resolve() == device:
-            try:
-                return int(read_text(path + "/temp1_input")) / 1000
-            except ValueError:
-                return None
-    return None
+def temp_for_hwmon(name, *, sample=None):
+    return (sample or HwmonSample()).temperature(name)
+
+
+def fan_readings(hwmon_root=Path('/sys/class/hwmon'), *, sample=None):
+    return (sample or HwmonSample(hwmon_root)).fans()
+
+
+def drive_temperature(by_id, *, sample=None):
+    return (sample or HwmonSample()).drive_temperature(by_id)
 
 
 def memory():
     values = {}
-    for line in read_text("/proc/meminfo").splitlines():
-        key, _, rest = line.partition(":")
-        if key in ("MemTotal", "MemAvailable"):
-            values[key] = int(rest.strip().split()[0]) / 1024 / 1024
-    return values.get("MemTotal", 0), values.get("MemTotal", 0) - values.get("MemAvailable", 0)
+    for line in read_text('/proc/meminfo').splitlines():
+        key, _, rest = line.partition(':')
+        if key in ('MemTotal', 'MemAvailable'):
+            try:
+                values[key] = int(rest.strip().split()[0]) / 1024 / 1024
+            except (ValueError, IndexError):
+                return None, None
+    total, available = values.get('MemTotal'), values.get('MemAvailable')
+    if total is None or available is None or not 0 <= available <= total:
+        return None, None
+    return total, total - available
+
+
+def uptime():
+    try:
+        return int(float(read_text('/proc/uptime').split()[0]))
+    except (ValueError, IndexError, OverflowError):
+        return None
 
 
 def cpu_usage():
@@ -95,6 +168,8 @@ def cpu_usage():
     except ValueError:
         return None
     total = sum(ticks)
+    if len(ticks) < 4:
+        return None
     idle = ticks[3] + (ticks[4] if len(ticks) > 4 else 0)
     previous, _CPU_SAMPLE = _CPU_SAMPLE, (total, idle)
     if previous is None or total <= previous[0]:
