@@ -11,14 +11,9 @@ import json
 from pathlib import Path
 import re
 import subprocess
-import time
 
 
 CONFIG_PATH = Path("/var/lib/r1-panel/storage-usage.json")
-REFRESH_SECONDS = 60
-_cached_at = 0.0
-_cached_disks = None
-_cached_usage = None
 
 
 def disk_generation(disks, by_id_root=Path("/dev/disk/by-id"), block_root=Path("/sys/block")):
@@ -48,49 +43,6 @@ def _run(args, timeout):
     return result.stdout
 
 
-def _nvme_usage():
-    """Percent of the host's local and thin PVE stores combined."""
-    output = _run(["pvesm", "status"], 4)
-    total = used = 0
-    seen = set()
-    for line in output.splitlines():
-        fields = line.split()
-        if len(fields) < 5 or fields[0] not in SITE.stores:
-            continue
-        try:
-            capacity, occupied = int(fields[3]), int(fields[4])
-        except ValueError:
-            continue
-        if capacity <= 0 or occupied < 0 or occupied > capacity:
-            continue
-        seen.add(fields[0])
-        total += capacity
-        used += occupied
-    if seen != set(SITE.stores) or total <= 0:
-        # The Web service cannot open /dev/mapper/control. PVE's own recent
-        # storage history remains readable without widening its device access.
-        total = used = 0
-        for name in SITE.stores:
-            output = _run(["pvesh", "get", f"/nodes/{SITE.node}/storage/{name}/rrddata",
-                           "--timeframe", "hour", "--cf", "AVERAGE",
-                           "--output-format", "json"], 4)
-            try:
-                samples = json.loads(output)
-                sample = next(row for row in reversed(samples)
-                              if row.get("total") and row.get("used") is not None)
-                capacity, occupied = int(sample["total"]), int(sample["used"])
-                age = time.time() - int(sample["time"])
-                if not 0 <= age <= 300 or not 0 <= occupied <= capacity:
-                    return None
-            except (ValueError, TypeError, KeyError, AttributeError, StopIteration):
-                return None
-            total += capacity
-            used += occupied
-        if total <= 0:
-            return None
-    return min(100, round(100 * used / total))
-
-
 def _config():
     try:
         config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -109,19 +61,6 @@ def _config():
         return host, user, vmid, identity, known_hosts, port
     except (OSError, ValueError, KeyError, TypeError):
         return None
-
-
-def _guest_usage(config):
-    output = _run(_guest_ssh_command(config), 6)
-    result = {}
-    for line in output.splitlines():
-        match = re.fullmatch(r"SATA\s+([0-9]+)\s+([0-9]{1,3})", line.strip())
-        if not match:
-            continue
-        slot, percent = map(int, match.groups())
-        if 1 <= slot <= 32 and 0 <= percent <= 100:
-            result[slot] = percent
-    return result
 
 
 def _guest_ssh_command(config):
@@ -172,21 +111,3 @@ def _map_guest_to_bays(disks, host_slots, guest, by_id_root=Path("/dev/disk/by-i
         if host_slot is not None:
             mapped[index] = guest.get(host_slot + 1)
     return mapped
-
-
-def storage_usage(disks):
-    """Return NVMe and four bay percentages, or None where not verified."""
-    global _cached_at, _cached_disks, _cached_usage
-    disks = tuple(disks)
-    generation = disk_generation(disks)
-    now = time.monotonic()
-    if generation is not None and generation == _cached_disks and _cached_usage is not None and now - _cached_at < REFRESH_SECONDS:
-        return list(_cached_usage)
-    usage = [_nvme_usage()] + [None] * len(disks)
-    config = _config()
-    if config:
-        guest = _guest_usage(config)
-        host_slots = _host_sata(config)
-        usage[1:] = _map_guest_to_bays(disks, host_slots, guest)
-    _cached_at, _cached_disks, _cached_usage = now, generation, tuple(usage)
-    return usage

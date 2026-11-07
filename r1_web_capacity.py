@@ -1,7 +1,6 @@
 """Read-only capacity figures for the Web disk cards.
 
 The shared display collector schedules the private query helpers independently.
-The legacy combined helper is retained for compatibility and fixture tests only.
 DSM reports per-volume KiB through its existing forced SSH command; PVE RRD supplies the
 host stores when the Web service cannot access the LVM control device.
 """
@@ -13,13 +12,7 @@ import json
 import re
 import time
 
-from r1_storage_usage import _config, _guest_ssh_command, _host_sata, _map_guest_to_bays, _run, disk_generation
-
-
-REFRESH_SECONDS = 60
-_cached_at = 0.0
-_cached_disks = None
-_cached_capacity = None
+from r1_storage_usage import _config, _guest_ssh_command, _host_sata, _map_guest_to_bays, _run
 
 
 def _nvme_capacity():
@@ -68,22 +61,3 @@ def _guest_capacity(config):
                 and used_kib + free_kib <= total_kib):
             result[slot] = (used_kib * 1024, free_kib * 1024, percent)
     return result
-
-
-def storage_capacity(disks):
-    """NVMe then physical bays; each entry is (used bytes, free bytes, percent)."""
-    global _cached_at, _cached_disks, _cached_capacity
-    disks = tuple(disks)
-    generation = disk_generation(disks)
-    now = time.monotonic()
-    if generation is not None and generation == _cached_disks and _cached_capacity is not None and now - _cached_at < REFRESH_SECONDS:
-        return list(_cached_capacity)
-    nvme = _nvme_capacity()
-    result = [nvme]
-    result += [None] * len(disks)
-    config = _config()
-    if config:
-        guest = _guest_capacity(config)
-        result[1:] = _map_guest_to_bays(disks, _host_sata(config), guest)
-    _cached_at, _cached_disks, _cached_capacity = now, generation, tuple(result)
-    return list(result)

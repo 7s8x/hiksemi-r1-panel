@@ -1,7 +1,6 @@
 """Loopback-only current-layout preview using synthetic data and no device API."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import json
 from urllib.parse import urlsplit, parse_qs
 import time
 

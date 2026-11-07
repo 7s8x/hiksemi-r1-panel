@@ -77,8 +77,10 @@ class WebTests(unittest.TestCase):
               patch("r1_web.rgb_png", return_value=b"PNG"),
               patch("r1_web.capture_frame", side_effect=AssertionError("physical framebuffer used"))):
             result = collect_public_frames()
-        self.assertEqual(FakePainter.views, ["fans"])
-        rasterize.assert_called_once()
+        self.assertEqual(FakePainter.views, [])
+        self.assertEqual(rasterize.call_count, 2)
+        self.assertEqual([call.args[1] for call in rasterize.call_args_list],
+                         [result["panel_svg"], result["fans_svg"]])
         self.assertEqual(result["panel"], b"PNG")
         self.assertEqual(result["fans"], b"PNG")
         self.assertIn(b"<svg", result["panel_svg"])
