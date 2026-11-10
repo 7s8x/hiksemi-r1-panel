@@ -487,6 +487,25 @@ class LogTests(unittest.TestCase):
                 _web_log("%s", "should-not-appear")
             self.assertFalse(log_path.exists())
 
+    def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
+        cases = [({'live': False}, '温控服务离线'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速运行 · 剩余 0 秒'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速运行'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '自动曲线运行中'),
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '自动曲线运行中'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '自动曲线运行中'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '自动曲线运行中')]
+        for control, expected in cases:
+            with self.subTest(control=control):
+                self.assertIn(expected.encode(), render_fans({'control': control}))
+
+    def test_fan_sensor_fault_status_takes_priority_over_control_mode(self):
+        control = {'live': True, 'mode': 'full', 'desired': 'full'}
+        svg = render_fans({'control': control, 'fans': {'fan2_input': 0}})
+        self.assertIn('停转'.encode(), svg)
+        self.assertIn('读数不可用'.encode(), svg)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与曲线控制，全速模式 60 秒自动回落
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 159 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
+- 当前源码的 165 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
 
 ### 尚未验证
 
@@ -243,7 +243,8 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |
 | `r1_rgb_control.py` / `r1_rgb_probe.py` | RGB 控制与定点探测 |
 | `r1_web.py` / `r1_web.html` / `r1_web_views.py` | HTTP/HTTPS 服务与共享画面渲染，PNG 复用已生成的 SVG |
-| `r1_storage_usage.py` / `r1_web_capacity.py` / `r1_dsm_usage.sh` | 受限 SSH、盘位映射与容量查询；由共享采集器统一调度，不再维护旧的独立容量缓存 |
+| `r1_storage_usage.py` / `r1_web_capacity.py` | 旧模块兼容导出；实际查询位于 `r1_storage_queries.py`，不单独维护缓存 |
+| `r1_dsm_usage.sh` | DSM 端受限只读容量命令，与主机查询协议配套 |
 | `*.service` | systemd 服务定义 |
 | `r1_panel_preflight.sh` / `r1_panel_restore_tty.sh` / `load_it87_for_curve.sh` | 启动前置检查、控制台恢复、驱动加载 |
 | `tests/` | 不接触硬件的离线测试 |

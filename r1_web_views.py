@@ -122,11 +122,19 @@ def render_information(data: dict, *, web_layout: bool = True, theme: str | None
     for index in range(2):
         vmid, status = vms[index] if index < len(vms) else (f"VM {index + 1}", "UNKNOWN")
         values[f"VM{index}_NAME"] = str(vmid)[:16]
-        values[f"VM{index}_ID"] = ""
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
         values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
     template = "r1_web_information_web.svg"
     return theme_svg(_template(template, values), theme)
+
+
+def _controller_state(control):
+    if not control.get('live'):
+        return 'offline'
+    if control.get('desired') != control.get('mode'):
+        return 'switching'
+    mode = control.get('mode')
+    return mode if mode in ('auto', 'full') else 'unknown'
 
 
 def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
@@ -134,6 +142,9 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
     values = _shared(data)
     fans = data.get("fans") or {}
     control = data.get("control") or {}
+    controller_state = _controller_state(control)
+    full_active = controller_state == "full"
+    auto_active = controller_state == "auto"
     for channel in (2, 3):
         rpm = _number(fans.get(f"fan{channel}_input"), 0, 20000)
         pwm = _number(fans.get(f"pwm{channel}"), 0, 255)
@@ -147,12 +158,12 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
             status = "停转"
         elif rpm is None:
             status = "读数不可用"
-        elif not control.get("live"):
+        elif controller_state == "offline":
             status = "离线"
-        elif control.get("desired") != control.get("mode"):
+        elif controller_state == "switching":
             status = "切换中"
         else:
-            status = {"auto": "自动", "full": "全速"}.get(control.get("mode"), "未知")
+            status = {"auto": "自动", "full": "全速"}.get(controller_state, "未知")
         prefix = f"F{channel}_"
         values.update({
             prefix + "RPM": str(round(rpm)) if rpm is not None else "--",
@@ -166,20 +177,19 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
             prefix + "STATUS": status,
             prefix + "STATUS_COLOR": "#9ee8ce" if status in ("自动", "全速") else "#f4b46f",
         })
-    if not control.get("live"):
-        control_status, control_mode, control_color = "温控服务离线", "--", "#f4b46f"
-    elif control.get("desired") != control.get("mode"):
-        control_status, control_mode, control_color = "正在切换模式", "--", "#f4b46f"
-    elif control.get("mode") == "full":
-        remaining = control.get("remaining")
-        control_status, control_mode, control_color = "全速运行中", f"全速 · 剩余 {remaining} 秒" if remaining is not None else "全速", "#f4b46f"
+    if controller_state == 'offline':
+        status_text, control_color = '温控服务离线', '#f4b46f'
+    elif controller_state == 'switching':
+        status_text, control_color = '正在切换模式', '#f4b46f'
+    elif full_active:
+        remaining = control.get('remaining')
+        status_text = f'全速运行 · 剩余 {remaining} 秒' if remaining is not None else '全速运行'
+        control_color = '#f4b46f'
     else:
-        control_status, control_mode, control_color = "自动曲线运行中", "自动调节", "#71d4b7"
-    full_active = control.get("live") and control.get("desired") == control.get("mode") == "full"
-    auto_active = control.get("live") and control.get("desired") == control.get("mode") == "auto"
+        status_text, control_color = '自动曲线运行中', '#71d4b7'
     active_bg, active_fg = "#71d4b7", "#0b121b"
     idle_bg, idle_fg = "#244354", "#edf6f8"
-    values.update(CONTROL_STATUS=control_status, CONTROL_MODE=control_mode,
+    values.update(CONTROL_STATUS=status_text,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG=active_bg if full_active else idle_bg,
                   FULL_BUTTON_FG=active_fg if full_active else idle_fg,
@@ -201,9 +211,5 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
-    if full_active:
-        remaining = control.get("remaining")
-        values["CONTROL_STATUS"] = (f"全速运行 · 剩余 {remaining} 秒"
-                                    if remaining is not None else "全速运行")
     template = "r1_web_fans_web.svg"
     return theme_svg(_template(template, values), theme)

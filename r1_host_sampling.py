@@ -181,6 +181,13 @@ def cpu_usage():
     return max(0, min(100, round(100 * (1 - (idle - previous[1]) / (total - previous[0])))))
 
 
+def _format_size(capacity):
+    """Decimal device size label; retain the existing TB/GB rounding."""
+    if not capacity:
+        return '--'
+    return f'{capacity / 1000:.0f}TB' if capacity >= 1000 else f'{capacity:.0f}GB'
+
+
 def disk_identity(by_id):
     """Use only the already-configured disk, without probing other devices."""
     disk = Path("/dev/disk/by-id", by_id).resolve()
@@ -190,8 +197,7 @@ def disk_identity(by_id):
         capacity = int(sectors) * 512 / 1_000_000_000
     except ValueError:
         capacity = 0
-    size = (f"{capacity / 1000:.0f}TB" if capacity >= 1000
-            else f"{capacity:.0f}GB" if capacity else "--")
+    size = _format_size(capacity)
     kind = ("NVME" if name.startswith("nvme") else
             "HDD" if read_text(Path("/sys/block", name, "queue/rotational")) == "1" else "SSD")
     serial = by_id.rsplit("_", 1)[-1] if "_" in by_id else "--"
@@ -208,7 +214,7 @@ def nvme_identity():
         capacity = int(sectors) * 512 / 1_000_000_000
     except ValueError:
         capacity = 0
-    size = f"{capacity / 1000:.0f}TB" if capacity >= 1000 else f"{capacity:.0f}GB" if capacity else "--"
+    size = _format_size(capacity)
     controller = name.rsplit("n", 1)[0]
     return size, "NVME", read_text(Path("/sys/class/nvme", controller, "serial")) or "--"
 

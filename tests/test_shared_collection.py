@@ -1,5 +1,4 @@
 """Exercise scheduling, failure boundaries and consumer isolation without hardware."""
-import json
 from pathlib import Path
 import stat
 import tempfile

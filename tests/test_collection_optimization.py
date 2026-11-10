@@ -9,7 +9,6 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import r1_panel_repository as panel
 import r1_vm_status as vm
-import r1_web_views as views
 
 
 class CollectionOptimizationTests(unittest.TestCase):
@@ -52,6 +51,13 @@ class CollectionOptimizationTests(unittest.TestCase):
             self.assertEqual(shared.collect_slow('identity', ())['pve_version'], 'PROXMOX VE 9.1.1')
             self.assertEqual(shared.collect_slow('identity', ())['pve_version'], 'PROXMOX VE --')
         self.assertEqual(read.call_count, 2)
+
+    def test_decimal_device_size_labels_preserve_existing_rounding(self):
+        from r1_host_sampling import _format_size
+        for value, expected in ((0, '--'), (500, '500GB'), (999, '999GB'),
+                                (1000, '1TB'), (1920, '2TB'), (4000, '4TB')):
+            with self.subTest(value=value):
+                self.assertEqual(_format_size(value), expected)
 
 
 if __name__ == "__main__":
