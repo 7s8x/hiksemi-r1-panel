@@ -75,6 +75,39 @@ class RgbTrialTests(unittest.TestCase):
             run_trial(-1)
         self.assertEqual(set_rgb.call_args_list[-1], call(-1, *BASELINE))
 
+    def test_trial_cli_resolves_verified_adapter_before_open(self):
+        import r1_rgb_trial as trial
+        with patch.object(sys, 'argv', ['r1_rgb_trial.py', 'read']), \
+             patch.object(trial, 'rgb_bus_path', return_value='/dev/i2c-7'), \
+             patch.object(trial.os, 'open', return_value=9) as opened, \
+             patch.object(trial.os, 'close') as closed, \
+             patch.object(trial, 'ioctl_checked') as ioctl, \
+             patch.object(trial, 'read_state', return_value=BASELINE):
+            trial.main()
+        self.assertEqual(opened.call_args.args[0], '/dev/i2c-7')
+        ioctl.assert_called_once_with(9, trial.I2C_SLAVE, trial.RGB_ADDRESS)
+        closed.assert_called_once_with(9)
+
+    def test_trial_cli_refuses_unknown_bus_before_any_device_access(self):
+        import r1_rgb_trial as trial
+        with patch.object(sys, 'argv', ['r1_rgb_trial.py', 'trial']), \
+             patch.object(trial, 'rgb_bus_path', side_effect=RuntimeError('adapter unavailable')), \
+             patch.object(trial.os, 'open') as opened, patch.object(trial, 'write_byte_data') as write:
+            with self.assertRaisesRegex(RuntimeError, 'adapter unavailable'):
+                trial.main()
+        opened.assert_not_called()
+        write.assert_not_called()
+
+    def test_bus_rejects_multiple_matching_adapter_children(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            adapter = Path(directory)
+            for name in ('i2c-0', 'i2c-7'):
+                (adapter / name).mkdir()
+                (adapter / name / 'name').write_text('Synopsys DesignWare I2C adapter')
+            with self.assertRaises(RuntimeError):
+                rgb_bus_path(adapter)
+
 
 if __name__ == "__main__":
     unittest.main()

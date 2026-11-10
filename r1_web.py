@@ -226,7 +226,6 @@ def initialize(*, tls=False, tls_name="localhost"):
         address = ipaddress.ip_address(tls_name)
         san = f"IP:{address}"
     except ValueError:
-        import re
         if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?", tls_name):
             raise ValueError("invalid certificate DNS name")
         san = f"DNS:{tls_name}"

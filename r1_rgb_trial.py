@@ -1,4 +1,4 @@
-"""Narrow, reversible RGB protocol trial for the verified R1 I2C-0/0x26.
+"""Narrow, reversible RGB protocol trial for the verified R1 adapter/0x26.
 
 Only four known candidate registers are touched. This is a temporary manual
 test, not a background lighting daemon or proof of visual LED behavior.
@@ -13,7 +13,7 @@ import time
 from r1_rgb_io import (I2C_SLAVE, RGB_ADDRESS, REG_MODE, REG_RED, REG_GREEN,
                        REG_BLUE, REGISTERS, ioctl_checked, read_byte_data, write_byte_data)
 
-BUS_PATH = "/dev/i2c-0"
+from r1_rgb_control import rgb_bus_path
 BASELINE = (2, 255, 0, 0)
 
 
@@ -58,7 +58,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("read", "trial", "restore"))
     args = parser.parse_args()
-    fd = os.open(BUS_PATH, os.O_RDWR | os.O_CLOEXEC)
+    fd = os.open(rgb_bus_path(), os.O_RDWR | os.O_CLOEXEC)
     try:
         ioctl_checked(fd, I2C_SLAVE, RGB_ADDRESS)
         if args.action == "read":
