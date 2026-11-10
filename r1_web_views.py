@@ -133,7 +133,8 @@ def _controller_state(control):
         return 'offline'
     if control.get('desired') != control.get('mode'):
         return 'switching'
-    return control.get('mode')
+    mode = control.get('mode')
+    return mode if mode in ('auto', 'full') else 'unknown'
 
 
 def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:

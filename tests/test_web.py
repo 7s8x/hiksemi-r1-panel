@@ -493,7 +493,9 @@ class LogTests(unittest.TestCase):
                  ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速运行 · 剩余 0 秒'),
                  ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速运行'),
                  ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '自动曲线运行中')]
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '自动曲线运行中'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '自动曲线运行中'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '自动曲线运行中')]
         for control, expected in cases:
             with self.subTest(control=control):
                 self.assertIn(expected.encode(), render_fans({'control': control}))
