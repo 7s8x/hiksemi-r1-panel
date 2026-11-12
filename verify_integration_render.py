@@ -12,6 +12,7 @@ import sys
 
 CHILD = r'''
 import hashlib, json, sys
+from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, sys.argv[1])
 from ui_preview import demo_data
@@ -19,8 +20,11 @@ from r1_web_views import render_information, render_fans
 from r1_panel_repository import Painter
 from r1_web import rgb_png
 result = {}
+output = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+if output is not None:
+    output.mkdir(parents=True, exist_ok=True)
 for theme in ('mocha', 'latte'):
-    for scenario in ('normal', 'missing', 'full'):
+    for scenario in ('normal', 'missing', 'full', 'high', 'low'):
         data = demo_data()
         data['clock'] = '12:34'
         if scenario == 'missing':
@@ -29,6 +33,8 @@ for theme in ('mocha', 'latte'):
         elif scenario == 'full':
             data['control'] = {'live': True, 'desired': 'full', 'mode': 'full', 'remaining': 29}
             data['rgb'] = True
+        elif scenario in ('high', 'low'):
+            data['control'] = {'live': True, 'desired': scenario, 'mode': scenario}
         for view, render in (('panel', render_information), ('fans', render_fans)):
             with patch('r1_theme.load_theme', return_value=theme):
                 svg = render(data, theme=theme)
@@ -43,14 +49,20 @@ for theme in ('mocha', 'latte'):
                 if hasattr(r1_web, 'encode_public_png'):
                     assert r1_web.encode_public_png(svg) == png, 'lazy PNG differs from physical renderer'
             key = theme + '/' + scenario + '/' + view
+            if output is not None:
+                (output / (key.replace('/', '-') + '.png')).write_bytes(png)
+                (output / (key.replace('/', '-') + '.svg')).write_bytes(svg)
             result[key+'/svg'] = hashlib.sha256(svg).hexdigest()
             result[key+'/png'] = hashlib.sha256(png).hexdigest()
 print(json.dumps(result, sort_keys=True))
 '''
 
 
-def hashes(root):
-    result = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', CHILD, str(root)],
+def hashes(root, output=None):
+    command = [sys.executable, '-I', '-S', '-B', '-c', CHILD, str(root)]
+    if output is not None:
+        command.append(str(output))
+    result = subprocess.run(command,
                             check=True, capture_output=True, text=True, timeout=90)
     return json.loads(result.stdout)
 
@@ -58,15 +70,22 @@ def hashes(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline', required=True, type=Path)
+    parser.add_argument('--fan-baseline', type=Path,
+                        help='Explicit reviewed fan-layout reference; panel still uses --baseline.')
+    parser.add_argument('--output', type=Path, help='Save synthetic frames for visual review.')
     args = parser.parse_args()
     if sys.platform != 'linux':
         raise SystemExit('Cairo equivalence must run on Linux; macOS is not a substitute.')
     baseline = hashes(args.baseline.resolve())
-    current = hashes(Path(__file__).resolve().parent)
+    if args.fan_baseline is not None:
+        fan_baseline = hashes(args.fan_baseline.resolve())
+        baseline = {name: value for name, value in baseline.items() if '/panel/' in name}
+        baseline.update({name: value for name, value in fan_baseline.items() if '/fans/' in name})
+    current = hashes(Path(__file__).resolve().parent, args.output.resolve() if args.output else None)
     different = [name for name in baseline if current.get(name) != baseline[name]]
     if different or current.keys() != baseline.keys():
         raise SystemExit('synthetic render mismatch: ' + ', '.join(different))
-    print(f'synthetic_render_hashes={len(current)} all_identical=true')
+    print(f'synthetic_render_hashes={len(current)} all_identical=true separate_fan_reference={args.fan_baseline is not None}')
 
 
 if __name__ == '__main__':

@@ -117,7 +117,13 @@ def save(record: object, path: Path | None = None, *, profile: str = "high") -> 
     return validated
 
 
-def bundle_digest() -> str:
-    """Acknowledge an edit to either profile, so Web never waits on a stale id."""
-    parts = [f"{name}:{digest(load(profile=name), name)}" for name in PROFILES]
+def load_profiles() -> dict:
+    """Read each profile once; callers publish only a complete validated set."""
+    return {name: load(profile=name) for name in PROFILES}
+
+
+def bundle_digest(profiles: dict | None = None) -> str:
+    """Identify the exact validated records applied, without rereading files."""
+    records = load_profiles() if profiles is None else profiles
+    parts = [f"{name}:{digest(records[name], name)}" for name in PROFILES]
     return hashlib.sha256("|".join(parts).encode("ascii")).hexdigest()[:16]

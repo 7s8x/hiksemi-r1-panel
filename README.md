@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与高速/低速双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 165 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、Web 与渲染等逻辑
+- 当前源码的 189 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 验证
 
 ### 尚未验证
 

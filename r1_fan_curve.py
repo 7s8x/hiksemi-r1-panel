@@ -199,9 +199,8 @@ def run(seconds: int, chip: Path) -> None:
         raise RuntimeError("PWM mode differs from verified manual/full-speed modes")
     deadline = None if seconds == 0 else time.monotonic() + seconds
     applied = (initial.pwm2, initial.pwm3)
-    previous_mode = None
     active_curves = {name: curves(DEFAULT, name) for name in PROFILES}
-    curve_id = bundle_digest()
+    curve_id = bundle_digest({name: DEFAULT for name in PROFILES})
     config_mtimes = {}
     print(f"curve_start={seconds}s drives={initial.drive_count}/{EXPECTED_DRIVES} "
           f"initial_pwm={initial.pwm2}/{initial.pwm3}", flush=True)
@@ -215,8 +214,10 @@ def run(seconds: int, chip: Path) -> None:
                     mtimes[name] = None
             if mtimes != config_mtimes:
                 try:
-                    active_curves = {name: curves(load(profile=name), name) for name in PROFILES}
-                    curve_id = bundle_digest()
+                    records = {name: load(profile=name) for name in PROFILES}
+                    candidate_curves = {name: curves(records[name], name) for name in PROFILES}
+                    candidate_id = bundle_digest(records)
+                    active_curves, curve_id = candidate_curves, candidate_id
                     config_mtimes = mtimes
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     print(f"curve_config_rejected={error}", flush=True)
@@ -230,7 +231,6 @@ def run(seconds: int, chip: Path) -> None:
                       else target_pwms(reading, EXPECTED_DRIVES, active_curves[profile]))
             applied = tuple(next_pwm(current, requested) for current, requested in zip(applied, target))
             set_channels(chip, *applied)
-            previous_mode = mode
             try:
                 publish_status(mode, max(applied), curve_id=curve_id, pwm2=applied[0], pwm3=applied[1])
             except OSError as error:

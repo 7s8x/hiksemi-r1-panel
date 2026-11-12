@@ -31,7 +31,7 @@ import time
 from urllib.parse import urlsplit
 import zlib
 
-from r1_fan_config import DEFAULT, PROFILES, bundle_digest, load, save, validate
+from r1_fan_config import DEFAULT, PROFILES, bundle_digest, load, load_profiles, save, validate
 from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
@@ -406,6 +406,46 @@ class BoundedHTTPServer(ThreadingHTTPServer):
         _web_log("operation_error request")
 
 
+class CurveUpdateError(RuntimeError):
+    """Safe client-facing outcome; no paths or underlying exception details."""
+
+
+def wait_curve_id(wanted: str, timeout: float = 12) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        current = control_status()
+        if current["live"] and current.get("curve_id") == wanted:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def apply_curve(record: dict, profile: str) -> tuple[dict, str]:
+    """Serialize edits and confirm both application and any compensating write."""
+    with CONFIG_LOCK:
+        before = load_profiles()  # Reject bad sibling files before any mutation.
+        after = validate(record, profile)
+        wanted = bundle_digest(dict(before, **{profile: after}))
+        previous_id = bundle_digest(before)
+        if not control_status()["live"]:
+            raise RuntimeError("fan controller offline")
+        try:
+            save(after, profile=profile)
+            if not wait_curve_id(wanted):
+                raise RuntimeError("curve acknowledgement timed out")
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError):
+            try:
+                save(before[profile], profile=profile)
+                if load(profile=profile) != before[profile]:
+                    raise RuntimeError("curve rollback readback mismatch")
+                if not wait_curve_id(previous_id):
+                    raise RuntimeError("curve rollback acknowledgement timed out")
+            except (OSError, RuntimeError, ValueError, KeyError, TypeError):
+                raise CurveUpdateError("curve update failed; rollback unconfirmed; inspect fan controller") from None
+            raise CurveUpdateError("curve update failed; previous curves restored and acknowledged") from None
+        return after, wanted
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "R1PanelWeb/1"
     protocol_version = "HTTP/1.1"
@@ -610,7 +650,7 @@ class Handler(BaseHTTPRequestHandler):
                     _web_log("operation_error curve_read")
             self._json(200, {"panel": panel, "fan": control_status(),
                              "curves": profiles["high"], "profiles": profiles,
-                             "curve_id": bundle_digest(),
+                             "curve_id": bundle_digest(profiles) if curve_error is None else None,
                              "baseline": DEFAULT,
                              "curve_error": curve_error,
                              "rgb_color_enabled": RGB_VERIFIED.exists(),
@@ -725,23 +765,9 @@ class Handler(BaseHTTPRequestHandler):
                 if profile not in PROFILES:
                     raise ValueError("invalid fan profile")
                 record = {key: body[key] for key in ("version", "cpu", "drive")}
-                with CONFIG_LOCK:
-                    before = load(profile=profile)
-                    after = validate(record, profile)
-                    if not control_status()["live"]:
-                        raise RuntimeError("fan controller offline")
-                    save(after, profile=profile)
-                    wanted = bundle_digest()
-                    deadline = time.monotonic() + 12
-                    while time.monotonic() < deadline:
-                        current = control_status()
-                        if current["live"] and current.get("curve_id") == wanted:
-                            self._json(200, {"ok": True, "profiles": {profile: after},
-                                             "curves": after, "profile": profile, "curve_id": wanted})
-                            return
-                        time.sleep(0.2)
-                    save(before, profile=profile)
-                    raise RuntimeError("fan controller did not acknowledge curve; previous curve restored")
+                after, wanted = apply_curve(record, profile)
+                self._json(200, {"ok": True, "profiles": {profile: after},
+                                 "curves": after, "profile": profile, "curve_id": wanted})
             elif path == "/api/rgb":
                 if not isinstance(body, dict) or set(body) != {"mode", "red", "green", "blue"}:
                     raise ValueError("invalid RGB request")
@@ -749,7 +775,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, result) if result.get("ok") else self._json(400, {"error": "RGB command rejected"})
             else:
                 self._json(404, {"error": "not found"})
-        except (OSError, RuntimeError, ValueError, TypeError):
+        except CurveUpdateError as error:
+            _web_log("operation_error curve_update")
+            self._json(503, {"error": str(error)})
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError):
             _web_log("operation_error command")
             self._json(400, {"error": "command rejected or unavailable"})
 

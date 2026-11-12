@@ -329,7 +329,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("pct===outputPercent(point[1])?point[1]:Math.round(pct*255/100)", source)
         self.assertIn("cpu:readCurve('cpu'),drive:readCurve('drive')", source)
         self.assertIn('id="curveProfile"', source)
-        self.assertIn("profile:activeProfile", source)
+        self.assertIn("const profile=activeProfile,record={profile", source)
         self.assertEqual(preview_web_source(), source)
 
     def test_source_allowlist(self):
