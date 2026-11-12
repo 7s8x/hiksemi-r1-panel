@@ -193,23 +193,26 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
         status_text, control_color = '正在切换模式', '#f4b46f'
     elif full_active:
         remaining = control.get('remaining')
-        status_text = f'全速运行 · 剩余 {remaining} 秒' if remaining is not None else '全速运行'
+        status_text = f'全速散热 · 剩余 {remaining} 秒' if remaining is not None else '全速散热'
         control_color = '#f4b46f'
     elif high_active:
-        status_text, control_color = '高速曲线运行中', '#71d4b7'
+        status_text, control_color = '标准模式', '#6bbfe5'
     elif low_active:
-        status_text, control_color = '低速曲线运行中', '#71d4b7'
+        status_text, control_color = '静音模式', '#6bbfe5'
     else:
         status_text, control_color = '曲线状态未知', '#f4b46f'
     active_bg, active_fg = "#71d4b7", "#0b121b"
     idle_bg, idle_fg = "#244354", "#edf6f8"
-    values.update(CONTROL_STATUS=status_text,
+    detail = ('结束后返回' + {'high': '标准模式', 'low': '静音模式', 'auto': '标准模式'}.get(control.get('return_to'), '原有模式')
+              if full_active else '根据温度自动调节风量' if high_active else
+              '优先降低噪音 · 高温自动提速' if low_active else '请核对温控服务状态')
+    values.update(CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
-                  FULL_BUTTON_BG=active_bg if full_active else idle_bg,
+                  FULL_BUTTON_BG="#6bbfe5" if full_active else idle_bg,
                   FULL_BUTTON_FG=active_fg if full_active else idle_fg,
-                  HIGH_BUTTON_BG=active_bg if high_active else idle_bg,
+                  HIGH_BUTTON_BG="#6bbfe5" if high_active else idle_bg,
                   HIGH_BUTTON_FG=active_fg if high_active else idle_fg,
-                  LOW_BUTTON_BG=active_bg if low_active else idle_bg,
+                  LOW_BUTTON_BG="#6bbfe5" if low_active else idle_bg,
                   LOW_BUTTON_FG=active_fg if low_active else idle_fg)
     rgb = data.get("rgb")
     values.update(RGB_STATUS="灯光已开启" if rgb is True else "灯光已关闭" if rgb is False else "灯光状态不可用",

@@ -49,12 +49,22 @@ class FanProfileTests(unittest.TestCase):
     def test_full_speed_ignores_both_profiles(self):
         self.assertEqual(self._run_once("full"), (255, 255))
 
+    def test_control_card_return_target_and_original_light_buttons(self):
+        for back, label in (("low", "静音"), ("high", "标准")):
+            svg = render_fans({"control": {"live": True, "mode": "full", "desired": "full", "remaining": 29, "return_to": back}})
+            self.assertIn(("结束后返回" + label + "模式").encode(), svg)
+            self.assertIn("全速散热 · 剩余 29 秒".encode(), svg)
+            self.assertIn("打开灯光".encode(), svg)
+            self.assertIn("关闭灯光".encode(), svg)
+            self.assertIn(b'x="32" y="882" width="148" height="45"', svg)
+            self.assertIn(b'x="196" y="882" width="148" height="45"', svg)
+
     def test_three_buttons_map_to_expected_modes_and_render(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             mode_file, status_file = root / "mode", root / "status.json"
-            expected = {80: ("full", "全速运行"), 188: ("high", "高速曲线运行中"),
-                        294: ("low", "低速曲线运行中")}
+            expected = {80: ("full", "全速散热"), 188: ("high", "标准模式"),
+                        294: ("low", "静音模式")}
             for x, (mode, label) in expected.items():
                 with self.subTest(mode=mode):
                     self.assertEqual(fan_button_mode((x, 760)), mode)

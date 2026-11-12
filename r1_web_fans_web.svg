@@ -48,14 +48,15 @@
 
     <rect x="16" y="665" width="344" height="134" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="691" fill="#edf6f8" font-size="16" font-weight="700">风扇控制</text>
-    <text x="344" y="690" fill="#9bb1be" font-size="12" text-anchor="end">智能温控</text>
-    <text x="32" y="723" fill="{{CONTROL_COLOR}}" font-size="19" font-weight="700">{{CONTROL_STATUS}}</text>
+    <text x="344" y="690" fill="#9bb1be" font-size="12" text-anchor="end">控制模式</text>
+    <text x="32" y="714" fill="{{CONTROL_COLOR}}" font-size="18" font-weight="700">{{CONTROL_STATUS}}</text>
+    <text x="32" y="732" fill="#9bb1be" font-size="11">{{CONTROL_DETAIL}}</text>
     <rect x="32" y="738" width="100" height="45" rx="5" fill="{{FULL_BUTTON_BG}}"/>
     <text x="82" y="766" fill="{{FULL_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">全速</text>
     <rect x="138" y="738" width="100" height="45" rx="5" fill="{{HIGH_BUTTON_BG}}"/>
-    <text x="188" y="766" fill="{{HIGH_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">高速</text>
+    <text x="188" y="766" fill="{{HIGH_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">标准</text>
     <rect x="244" y="738" width="100" height="45" rx="5" fill="{{LOW_BUTTON_BG}}"/>
-    <text x="294" y="766" fill="{{LOW_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">低速</text>
+    <text x="294" y="766" fill="{{LOW_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">静音</text>
 
     <rect x="16" y="809" width="344" height="134" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="835" fill="#edf6f8" font-size="16" font-weight="700">灯光控制</text>

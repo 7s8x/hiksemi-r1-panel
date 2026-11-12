@@ -128,9 +128,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
         self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
-        for label in ("全速", "高速", "低速"):
+        for label in ("全速", "标准", "静音"):
             self.assertIn(label, fans)
-        self.assertIn("高速曲线运行中", fans)
+        self.assertIn("标准模式", fans)
         self.assertIn("打开灯光", fans)
         self.assertIn("关闭灯光", fans)
         self.assertIn("灯光已关闭", fans)
@@ -155,7 +155,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("独立温控服务", web_fans)
         self.assertNotIn("自动调节", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("全速运行 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("全速散热 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -493,11 +493,11 @@ class LogTests(unittest.TestCase):
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
         cases = [({'live': False}, '温控服务离线'),
                  ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速运行 · 剩余 0 秒'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速运行'),
-                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '高速曲线运行中'),
-                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '低速曲线运行中'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '高速曲线运行中'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速散热 · 剩余 0 秒'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速散热'),
+                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准模式'),
+                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音模式'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准模式'),
                  ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '曲线状态未知'),
                  ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '曲线状态未知'),
                  ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '曲线状态未知')]
