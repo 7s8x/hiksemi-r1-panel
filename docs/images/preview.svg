@@ -130,11 +130,13 @@
     <rect x="16" y="665" width="344" height="134" rx="7" fill="#1e1e2e" stroke="#45475a"/>
     <text x="32" y="691" fill="#cdd6f4" font-size="16" font-weight="700">风扇控制</text>
     <text x="344" y="690" fill="#a6adc8" font-size="12" text-anchor="end">智能温控</text>
-    <text x="32" y="723" fill="#94e2d5" font-size="19" font-weight="700">自动曲线运行中</text>
-    <rect x="32" y="738" width="148" height="45" rx="5" fill="#313244"/>
-    <text x="106" y="766" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">全速 1 分钟</text>
-    <rect x="196" y="738" width="148" height="45" rx="5" fill="#94e2d5"/>
-    <text x="270" y="766" fill="#11111b" font-size="14" font-weight="700" text-anchor="middle">自动曲线</text>
+    <text x="32" y="723" fill="#94e2d5" font-size="19" font-weight="700">高速曲线运行中</text>
+    <rect x="32" y="738" width="100" height="45" rx="5" fill="#313244"/>
+    <text x="82" y="766" fill="#cdd6f4" font-size="15" font-weight="700" text-anchor="middle">全速</text>
+    <rect x="138" y="738" width="100" height="45" rx="5" fill="#94e2d5"/>
+    <text x="188" y="766" fill="#11111b" font-size="15" font-weight="700" text-anchor="middle">高速</text>
+    <rect x="244" y="738" width="100" height="45" rx="5" fill="#313244"/>
+    <text x="294" y="766" fill="#cdd6f4" font-size="15" font-weight="700" text-anchor="middle">低速</text>
 
     <rect x="16" y="809" width="344" height="134" rx="7" fill="#1e1e2e" stroke="#45475a"/>
     <text x="32" y="835" fill="#cdd6f4" font-size="16" font-weight="700">灯光控制</text>
