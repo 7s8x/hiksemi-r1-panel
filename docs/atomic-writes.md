@@ -4,12 +4,12 @@
 
 | 写入入口 | 用途 | 临时文件与权限 | 文件 fsync | 替换后验证 / 异常清理 |
 |---|---|---|---|---|
-| `r1_web._atomic_json` | 管理员持久凭据记录 | PID+时间戳；O_EXCL；0600 | 有 | finally 清理临时名；调用者负责认证/会话处理 |
-| `r1_theme.save_theme` | 持久主题 | PID+时间戳；O_EXCL；0600 | 有 | finally 清理；读取时有合法值与缺失兜底 |
+| `r1_web.atomic_json` | 管理员持久凭据记录 | PID+时间戳；O_EXCL；0600 | 有 | finally 清理临时名；调用者负责认证/会话处理 |
+| `r1_theme.save_theme` | 持久主题 | PID；O_EXCL；0600 | 有 | finally 清理；读取时有合法值与缺失兜底 |
 | `r1_fan_config.save` | 两档持久曲线 | PID+时间戳；O_EXCL；0600 | 有 | 替换后重新读取校验；finally 清理；Web另等待控制器确认及必要回退 |
 | `r1_fan_control_ipc._replace_text` | 持久模式请求 / 高频运行状态 | PID+时间戳；O_EXCL；0600 | 有 | 无finally清理；失败可能留下点前缀临时文件，正式目标名不暴露部分内容 |
 | `r1_panel_runtime.publish_state` | `/run` 面板状态 | PID；O_TRUNC；新文件0600 | 无 | 关闭后替换；无finally清理；读取受时间有效期和结构校验约束 |
-| `r1_collection.CollectionService.publish` | `/run` 共享快照 | PID；O_TRUNC；写后chmod0600，父目录0700 | 无 | 大小/JSON有限值校验后替换；读取按各组有效期失效；无finally清理 |
+| `r1_collection.Collector.publish` | `/run` 共享快照 | PID；O_TRUNC；写后chmod0600，父目录0700 | 无 | 大小/JSON有限值校验后替换；读取按各组有效期失效；无finally清理 |
 
 持久配置优先保证替换前文件内容落盘；`/run` 状态在重启后重新生成，以新鲜度校验而非断电持久性作为正确性边界。IPC 同一个函数同时写持久模式与运行状态，当前仍保留 fsync，未机械归入“状态文件可取消同步”。
 
