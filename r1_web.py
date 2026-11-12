@@ -31,7 +31,7 @@ import time
 from urllib.parse import urlsplit
 import zlib
 
-from r1_fan_config import DEFAULT, digest, load, save, validate
+from r1_fan_config import DEFAULT, PROFILES, bundle_digest, load, save, validate
 from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
@@ -599,15 +599,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/status":
             panel = read_state()
-            try:
-                active_curves = load()
-                curve_error = None
-            except (OSError, ValueError, KeyError, TypeError):
-                active_curves = DEFAULT
-                curve_error = "curve configuration unavailable"
-                _web_log("operation_error curve_read")
+            profiles = {}
+            curve_error = None
+            for name in PROFILES:
+                try:
+                    profiles[name] = load(profile=name)
+                except (OSError, ValueError, KeyError, TypeError):
+                    profiles[name] = DEFAULT
+                    curve_error = "curve configuration unavailable"
+                    _web_log("operation_error curve_read")
             self._json(200, {"panel": panel, "fan": control_status(),
-                             "curves": active_curves, "curve_id": digest(active_curves),
+                             "curves": profiles["high"], "profiles": profiles,
+                             "curve_id": bundle_digest(),
                              "baseline": DEFAULT,
                              "curve_error": curve_error,
                              "rgb_color_enabled": RGB_VERIFIED.exists(),
@@ -706,28 +709,38 @@ class Handler(BaseHTTPRequestHandler):
                 result = request(body)
                 self._json(200, result) if result.get("ok") else self._json(400, {"error": "panel command rejected"})
             elif path == "/api/fan/mode":
-                if not isinstance(body, dict) or body.get("mode") not in ("auto", "full"):
+                if (not isinstance(body, dict) or set(body) != {"mode"}
+                        or body["mode"] not in ("high", "low", "full", "auto")):
                     raise ValueError("invalid fan mode")
                 if not control_status()["live"]:
                     raise RuntimeError("fan controller offline")
                 request_mode(body["mode"])
                 self._json(200, {"ok": True, "status": control_status()})
             elif path == "/api/fan/curves":
+                if (not isinstance(body, dict)
+                        or set(body) not in ({"version", "cpu", "drive"},
+                                             {"profile", "version", "cpu", "drive"})):
+                    raise ValueError("invalid curve request")
+                profile = body.get("profile", "high")
+                if profile not in PROFILES:
+                    raise ValueError("invalid fan profile")
+                record = {key: body[key] for key in ("version", "cpu", "drive")}
                 with CONFIG_LOCK:
-                    before = load()
-                    after = validate(body)
+                    before = load(profile=profile)
+                    after = validate(record, profile)
                     if not control_status()["live"]:
                         raise RuntimeError("fan controller offline")
-                    save(after)
-                    wanted = digest(after)
+                    save(after, profile=profile)
+                    wanted = bundle_digest()
                     deadline = time.monotonic() + 12
                     while time.monotonic() < deadline:
                         current = control_status()
                         if current["live"] and current.get("curve_id") == wanted:
-                            self._json(200, {"ok": True, "curves": after, "curve_id": wanted})
+                            self._json(200, {"ok": True, "profiles": {profile: after},
+                                             "curves": after, "profile": profile, "curve_id": wanted})
                             return
                         time.sleep(0.2)
-                    save(before)
+                    save(before, profile=profile)
                     raise RuntimeError("fan controller did not acknowledge curve; previous curve restored")
             elif path == "/api/rgb":
                 if not isinstance(body, dict) or set(body) != {"mode", "red", "green", "blue"}:

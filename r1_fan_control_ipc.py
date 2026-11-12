@@ -1,4 +1,10 @@
-"""Small root-only mode request and status interface for the R1 fan service."""
+"""Small root-only mode request and status interface for the R1 fan service.
+
+Modes are ``high`` / ``low`` (persistent curve profiles) and ``full`` (a bounded
+60-second burst).  A full-speed request records the profile it must return to,
+so expiry restores the operator's last choice instead of a hard-coded default.
+The historical ``auto`` spelling is accepted as an alias for ``high``.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +17,14 @@ import time
 
 MODE_FILE = Path("/var/lib/r1-fan-curve/mode")
 STATUS_FILE = Path("/run/r1-fan-curve/status.json")
-MODES = frozenset(("auto", "full"))
+PROFILES = frozenset(("high", "low"))
+MODES = frozenset(("high", "low", "full"))
+ALIASES = {"auto": "high"}
 FULL_SPEED_SECONDS = 60
+
+
+def normalize_mode(mode: str) -> str:
+    return ALIASES.get(mode, mode)
 
 
 def _replace_text(path: Path, contents: str) -> None:
@@ -26,51 +38,61 @@ def _replace_text(path: Path, contents: str) -> None:
     os.replace(temporary, path)
 
 
-def _stored_request(path: Path) -> tuple[str, float | None]:
+def _stored_request(path: Path) -> tuple[str, float | None, str]:
+    """Return (mode, full-speed expiry, profile to restore)."""
     try:
         value = path.read_text(encoding="ascii").strip()
     except FileNotFoundError:
-        return "auto", None
+        return "high", None, "high"
     except (OSError, UnicodeError):
-        return "full", None  # fail high on an unreadable request
-    if value == "auto":
-        return "auto", None
+        return "full", None, "high"  # fail high on an unreadable request
+    if value in ("high", "low", "auto"):
+        mode = normalize_mode(value)
+        return mode, None, mode
     try:
         record = json.loads(value)
         expiry = record["expires_at"]
         if (record["mode"] == "full" and isinstance(expiry, (int, float))
                 and math.isfinite(expiry)):
-            return "full", expiry
-    except (ValueError, KeyError, TypeError):
+            back = normalize_mode(record.get("return_to", "high"))
+            if back not in PROFILES:
+                back = "high"
+            return "full", expiry, back
+    except (ValueError, KeyError, TypeError, AttributeError):
         pass
-    return "full", None  # invalid requests never lower fan speed
+    return "full", None, "high"  # invalid requests never lower fan speed
 
 
 def requested_mode(path: Path = MODE_FILE, clear_expired: bool = False) -> str:
-    mode, expiry = _stored_request(path)
+    mode, expiry, back = _stored_request(path)
     if mode == "full" and expiry is not None and time.time() >= expiry:
         if clear_expired:
-            request_mode("auto", path)
-        return "auto"
+            request_mode(back, path)
+        return back
     return mode
 
 
 def request_mode(mode: str, path: Path = MODE_FILE) -> None:
+    mode = normalize_mode(mode)
     if mode not in MODES:
         raise ValueError(f"unsupported fan mode: {mode}")
     if mode == "full":
-        stored_mode, expiry = _stored_request(path)
+        stored_mode, expiry, back = _stored_request(path)
         if stored_mode == "full" and expiry is not None and expiry > time.time():
             return  # repeated taps do not extend the original 60-second burst
-        content = json.dumps({"mode": "full", "expires_at": time.time() + FULL_SPEED_SECONDS})
+        origin = back if stored_mode == "full" else (
+            stored_mode if stored_mode in PROFILES else "high")
+        content = json.dumps({"mode": "full", "expires_at": time.time() + FULL_SPEED_SECONDS,
+                              "return_to": origin})
     else:
-        content = "auto\n"
+        content = mode + "\n"
     _replace_text(path, content)
 
 
 def publish_status(mode: str, pwm: int, path: Path = STATUS_FILE,
                    curve_id: str | None = None,
                    pwm2: int | None = None, pwm3: int | None = None) -> None:
+    mode = normalize_mode(mode)
     if mode not in MODES or not 120 <= pwm <= 255:
         raise ValueError("invalid fan status")
     record = {"mode": mode, "pwm": pwm, "updated": time.time()}
@@ -86,15 +108,15 @@ def publish_status(mode: str, pwm: int, path: Path = STATUS_FILE,
 def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
                    max_age: float = 15.0) -> dict:
     desired = requested_mode(mode_path)
-    stored_mode, expiry = _stored_request(mode_path)
+    stored_mode, expiry, back = _stored_request(mode_path)
     remaining = (max(0, math.ceil(expiry - time.time()))
                  if stored_mode == "full" and expiry is not None and desired == "full"
                  else None)
     result = {"desired": desired, "mode": None, "pwm": None, "curve_id": None,
-              "live": False, "remaining": remaining}
+              "live": False, "remaining": remaining, "return_to": back}
     try:
         status = json.loads(status_path.read_text(encoding="ascii"))
-        mode = status["mode"]
+        mode = normalize_mode(status["mode"])
         pwm = status["pwm"]
         updated = status["updated"]
         if (mode in MODES and isinstance(pwm, int) and 120 <= pwm <= 255
@@ -106,6 +128,6 @@ def control_status(mode_path: Path = MODE_FILE, status_path: Path = STATUS_FILE,
                 value = status.get(f"pwm{channel}", pwm)
                 if type(value) is int and 120 <= value <= 255:
                     result[f"pwm{channel}"] = value
-    except (OSError, ValueError, KeyError, TypeError, UnicodeError):
+    except (OSError, ValueError, KeyError, TypeError, UnicodeError, AttributeError):
         pass
     return result

@@ -277,12 +277,15 @@ def shifted_state(current, horizontal_delta):
 
 
 def fan_button_mode(point):
+    """Three control buttons share the row; gaps between them stay inert."""
     x, y = point
     if 738 <= y <= 783:
-        if 32 <= x <= 180:
+        if 32 <= x <= 132:
             return "full"
-        if 196 <= x <= 344:
-            return "auto"
+        if 138 <= x <= 238:
+            return "high"
+        if 244 <= x <= 344:
+            return "low"
     return None
 
 

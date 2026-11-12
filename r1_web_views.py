@@ -128,13 +128,22 @@ def render_information(data: dict, *, web_layout: bool = True, theme: str | None
     return theme_svg(_template(template, values), theme)
 
 
+_LEGACY_MODES = {"auto": "high"}
+
+
+def _normal_mode(mode):
+    return _LEGACY_MODES.get(mode, mode)
+
+
 def _controller_state(control):
+    """Normalize the retired ``auto`` status so old controller files keep rendering."""
     if not control.get('live'):
         return 'offline'
-    if control.get('desired') != control.get('mode'):
+    desired = _normal_mode(control.get('desired'))
+    mode = _normal_mode(control.get('mode'))
+    if desired != mode:
         return 'switching'
-    mode = control.get('mode')
-    return mode if mode in ('auto', 'full') else 'unknown'
+    return mode if mode in ('high', 'low', 'full') else 'unknown'
 
 
 def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
@@ -144,7 +153,8 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
     control = data.get("control") or {}
     controller_state = _controller_state(control)
     full_active = controller_state == "full"
-    auto_active = controller_state == "auto"
+    high_active = controller_state == "high"
+    low_active = controller_state == "low"
     for channel in (2, 3):
         rpm = _number(fans.get(f"fan{channel}_input"), 0, 20000)
         pwm = _number(fans.get(f"pwm{channel}"), 0, 255)
@@ -163,7 +173,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
         elif controller_state == "switching":
             status = "切换中"
         else:
-            status = {"auto": "自动", "full": "全速"}.get(controller_state, "未知")
+            status = {"high": "高速", "low": "低速", "full": "全速"}.get(controller_state, "未知")
         prefix = f"F{channel}_"
         values.update({
             prefix + "RPM": str(round(rpm)) if rpm is not None else "--",
@@ -175,7 +185,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
             prefix + "ARC": round(364 * percent / 100) if percent is not None else 0,
             prefix + "ARC_COLOR": arc_color,
             prefix + "STATUS": status,
-            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("自动", "全速") else "#f4b46f",
+            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("高速", "低速", "全速") else "#f4b46f",
         })
     if controller_state == 'offline':
         status_text, control_color = '温控服务离线', '#f4b46f'
@@ -185,16 +195,22 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
         remaining = control.get('remaining')
         status_text = f'全速运行 · 剩余 {remaining} 秒' if remaining is not None else '全速运行'
         control_color = '#f4b46f'
+    elif high_active:
+        status_text, control_color = '高速曲线运行中', '#71d4b7'
+    elif low_active:
+        status_text, control_color = '低速曲线运行中', '#71d4b7'
     else:
-        status_text, control_color = '自动曲线运行中', '#71d4b7'
+        status_text, control_color = '曲线状态未知', '#f4b46f'
     active_bg, active_fg = "#71d4b7", "#0b121b"
     idle_bg, idle_fg = "#244354", "#edf6f8"
     values.update(CONTROL_STATUS=status_text,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG=active_bg if full_active else idle_bg,
                   FULL_BUTTON_FG=active_fg if full_active else idle_fg,
-                  AUTO_BUTTON_BG=active_bg if auto_active else idle_bg,
-                  AUTO_BUTTON_FG=active_fg if auto_active else idle_fg)
+                  HIGH_BUTTON_BG=active_bg if high_active else idle_bg,
+                  HIGH_BUTTON_FG=active_fg if high_active else idle_fg,
+                  LOW_BUTTON_BG=active_bg if low_active else idle_bg,
+                  LOW_BUTTON_FG=active_fg if low_active else idle_fg)
     rgb = data.get("rgb")
     values.update(RGB_STATUS="灯光已开启" if rgb is True else "灯光已关闭" if rgb is False else "灯光状态不可用",
                   RGB_COLOR="#71d4b7" if rgb is True else "#9bb1be" if rgb is False else "#f4b46f",

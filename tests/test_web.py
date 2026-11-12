@@ -128,8 +128,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
         self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
-        self.assertIn("全速 1 分钟", fans)
-        self.assertIn("自动曲线", fans)
+        for label in ("全速", "高速", "低速"):
+            self.assertIn(label, fans)
+        self.assertIn("高速曲线运行中", fans)
         self.assertIn("打开灯光", fans)
         self.assertIn("关闭灯光", fans)
         self.assertIn("灯光已关闭", fans)
@@ -145,7 +146,7 @@ class WebTests(unittest.TestCase):
         self.assertTrue(any(node.attrib.get("x") == "94" and node.text == "47%" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "995" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "RPM" for node in fan_text))
-        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "自动" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "高速" for node in fan_text))
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")
@@ -327,6 +328,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function outputPercent(pwm){return Math.round(pwm*100/255)}", source)
         self.assertIn("pct===outputPercent(point[1])?point[1]:Math.round(pct*255/100)", source)
         self.assertIn("cpu:readCurve('cpu'),drive:readCurve('drive')", source)
+        self.assertIn('id="curveProfile"', source)
+        self.assertIn("profile:activeProfile", source)
         self.assertEqual(preview_web_source(), source)
 
     def test_source_allowlist(self):
@@ -492,10 +495,12 @@ class LogTests(unittest.TestCase):
                  ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
                  ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速运行 · 剩余 0 秒'),
                  ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速运行'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '自动曲线运行中')]
+                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '高速曲线运行中'),
+                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '低速曲线运行中'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '高速曲线运行中'),
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '曲线状态未知'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '曲线状态未知'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '曲线状态未知')]
         for control, expected in cases:
             with self.subTest(control=control):
                 self.assertIn(expected.encode(), render_fans({'control': control}))
