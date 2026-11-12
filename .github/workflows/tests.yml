@@ -39,10 +39,10 @@ jobs:
           ref: 0ed06323bc8373793bbc88eed487324c1d4c5ecc
           path: render-baseline
 
-      - name: 检出三档风扇页固定参考（不替换信息页基线）
+      - name: 检出标准/静音控制卡片固定参考（不替换信息页基线）
         uses: actions/checkout@v4
         with:
-          ref: 61ac0329394c7c3ab6a99e5df723cd9c6da6858f
+          ref: bafe5e7b8e5653fef60465ff847b2a2b8bd35676
           path: fan-render-baseline
 
       - name: Linux模拟数据SVG及Cairo PNG等价

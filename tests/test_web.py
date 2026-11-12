@@ -150,10 +150,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")
-        self.assertIn("智能温控", web_fans)
+        self.assertIn("控制模式", web_fans)
         self.assertIn("机身 RGB", web_fans)
         self.assertNotIn("独立温控服务", web_fans)
-        self.assertNotIn("自动调节", web_fans)
+        self.assertIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
         self.assertIn("全速散热 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))

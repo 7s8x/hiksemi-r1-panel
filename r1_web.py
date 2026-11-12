@@ -312,8 +312,8 @@ def collect_public_frames() -> dict:
     freshness = data.get('freshness')
     if freshness is not None and not freshness.get('valid'):
         raise RuntimeError('shared display unavailable')
-    frames = {"panel_svg": render_information(data, web_layout=True),
-              "fans_svg": render_fans(data, web_layout=True)}
+    frames = {"panel_svg": render_information(data),
+              "fans_svg": render_fans(data)}
     frames['groups'] = dict((freshness or {}).get('groups', {}))
     frames['updated'] = time.time()
     return frames
@@ -747,7 +747,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")
                 result = request(body)
-                self._json(200, result) if result.get("ok") else self._json(400, {"error": "panel command rejected"})
+                if result.get("ok"):
+                    self._json(200, result)
+                else:
+                    self._json(400, {"error": "panel command rejected"})
             elif path == "/api/fan/mode":
                 if (not isinstance(body, dict) or set(body) != {"mode"}
                         or body["mode"] not in ("high", "low", "full", "auto")):

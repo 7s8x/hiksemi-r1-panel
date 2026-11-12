@@ -31,7 +31,7 @@ for theme in ('mocha', 'latte'):
             data.update(cpu=None, cpu_usage=None, mem_used=None, storage=[],
                         storage_capacity=[], storage_usage=[], fans=None, fan_basis=(None,None,0))
         elif scenario == 'full':
-            data['control'] = {'live': True, 'desired': 'full', 'mode': 'full', 'remaining': 29}
+            data['control'] = {'live': True, 'desired': 'full', 'mode': 'full', 'remaining': 29, 'return_to': 'low'}
             data['rgb'] = True
         elif scenario in ('high', 'low'):
             data['control'] = {'live': True, 'desired': scenario, 'mode': scenario}

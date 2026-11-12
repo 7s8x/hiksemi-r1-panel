@@ -56,6 +56,34 @@ _RGB_CACHE = None
 _RGB_EXPIRES = 0
 
 
+def validate_command(command):
+    """Validate only protocol shape and values; never read state or touch devices."""
+    if not isinstance(command, dict) or set(command) != {"action", "value"}:
+        raise ValueError("invalid command")
+    action, value = command["action"], command["value"]
+    if action == "page":
+        if value not in SCREEN_STATES:
+            raise ValueError("invalid page")
+    elif action == "tap":
+        if (not isinstance(value, list) or len(value) != 2
+                or any(type(v) is not int for v in value)
+                or not 0 <= value[0] < WIDTH or not 0 <= value[1] < HEIGHT):
+            raise ValueError("invalid tap coordinates")
+    elif action == "brightness":
+        if type(value) is not int or not 2 <= value <= 100:
+            raise ValueError("invalid brightness")
+    elif action == "rgb":
+        if (not isinstance(value, list) or len(value) != 4
+                or any(type(v) is not int for v in value)):
+            raise ValueError("invalid RGB request")
+    elif action == "rgb_state":
+        if value is not None:
+            raise ValueError("invalid RGB status request")
+    else:
+        raise ValueError("unknown command")
+    return action, value
+
+
 def remember_rgb_state(state):
     """Reuse a verified write readback; None invalidates after a hardware toggle."""
     global _RGB_CACHE, _RGB_EXPIRES
@@ -143,7 +171,7 @@ class Painter:
         self.lib.cairo_show_text(self.ctx, str(value).encode("utf-8"))
 
     def draw(self, data, touch_mode=False, brightness=None, view="panel"):
-        svg = render_fans(data, web_layout=True) if view == "fans" else render_information(data, web_layout=True)
+        svg = render_fans(data) if view == "fans" else render_information(data)
         paint_svg(self, svg)
         return
     def end_screen(self):
@@ -443,24 +471,14 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     raise ValueError("unknown panel action")
 
             def handle_command(command):
-                if not isinstance(command, dict) or set(command) != {"action", "value"}:
-                    raise ValueError("invalid command")
-                action, value = command["action"], command["value"]
+                action, value = validate_command(command)
                 if action == "page":
-                    if value not in SCREEN_STATES:
-                        raise ValueError("invalid page")
                     transition(value)
                 elif action == "tap":
-                    if (not isinstance(value, list) or len(value) != 2
-                            or any(type(v) is not int for v in value)
-                            or not 0 <= value[0] < WIDTH or not 0 <= value[1] < HEIGHT):
-                        raise ValueError("invalid tap coordinates")
                     if state not in ("panel", "fans"):
                         raise ValueError("tap unavailable on console/off")
                     handle_action("tap", tuple(value))
                 elif action == "brightness":
-                    if type(value) is not int or not 2 <= value <= 100:
-                        raise ValueError("invalid brightness")
                     nonlocal brightness
                     brightness = max(minimum, min(maximum, round(maximum * value / 100)))
                     if state != "off":
@@ -468,9 +486,6 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     if state in ("panel", "fans"):
                         refresh()
                 elif action == "rgb":
-                    if (not isinstance(value, list) or len(value) != 4
-                            or any(type(v) is not int for v in value)):
-                        raise ValueError("invalid RGB request")
                     current = RGB.read_state()
                     if value[0] in (1, 3) or tuple(value[1:]) != current[1:]:
                         if not Path("/var/lib/r1-web/rgb-verified").exists():
@@ -481,8 +496,6 @@ def run_touch(painter, initial_view="panel", metrics=None):
                         refresh()
                     return {"ok": True, "state": state, "rgb": actual}
                 elif action == "rgb_state":
-                    if value is not None:
-                        raise ValueError("invalid RGB status request")
                     return {"ok": True, "state": state, "rgb": rgb_state_cached()}
                 else:
                     raise ValueError("unknown command")
