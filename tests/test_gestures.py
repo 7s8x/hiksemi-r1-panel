@@ -46,10 +46,12 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(gesture((170, 400), (175, 404)), [("tap", (175, 404))])
 
     def test_fan_buttons_only_accept_taps_inside_their_bounds(self):
-        self.assertEqual(fan_button_mode((100, 760)), "full")
-        self.assertEqual(fan_button_mode((250, 760)), "auto")
-        self.assertIsNone(fan_button_mode((188, 760)))
-        self.assertIsNone(fan_button_mode((100, 720)))
+        self.assertEqual(fan_button_mode((80, 760)), "full")
+        self.assertEqual(fan_button_mode((188, 760)), "high")
+        self.assertEqual(fan_button_mode((294, 760)), "low")
+        self.assertIsNone(fan_button_mode((135, 760)))
+        self.assertIsNone(fan_button_mode((241, 760)))
+        self.assertIsNone(fan_button_mode((80, 720)))
         self.assertEqual(rgb_button_action((100, 905)), "on")
         self.assertEqual(rgb_button_action((250, 905)), "off")
         self.assertIsNone(rgb_button_action((188, 905)))

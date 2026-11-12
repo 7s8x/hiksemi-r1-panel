@@ -30,14 +30,29 @@ jobs:
       - name: 运行受防护离线单元测试
         run: python -I -S -B run_offline_tests.py
 
+      - name: 曲线编辑器异步回执与切档回归
+        run: node tests/test_curve_editor.cjs
+
       - name: 检出已验证的渲染基线
         uses: actions/checkout@v4
         with:
           ref: 0ed06323bc8373793bbc88eed487324c1d4c5ecc
           path: render-baseline
 
+      - name: 检出标准/静音控制卡片固定参考（不替换信息页基线）
+        uses: actions/checkout@v4
+        with:
+          ref: bafe5e7b8e5653fef60465ff847b2a2b8bd35676
+          path: fan-render-baseline
+
       - name: Linux模拟数据SVG及Cairo PNG等价
-        run: python -I -S -B verify_integration_render.py --baseline render-baseline
+        run: python -I -S -B verify_integration_render.py --baseline render-baseline --fan-baseline fan-render-baseline --output render-preview
+
+      - name: 保存模拟画面供目视复核
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-preview-py${{ matrix.python-version }}
+          path: render-preview
 
       - name: 检查干净发行包与模块导入
         env:
@@ -47,3 +62,4 @@ jobs:
           cd "$R1_TEST_PACKAGE"
           sha256sum --check SHA256SUMS.txt
           python -I -S -B run_offline_tests.py
+          node tests/test_curve_editor.cjs

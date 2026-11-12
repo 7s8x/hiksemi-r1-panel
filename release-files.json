@@ -63,6 +63,9 @@
   "tests/test_fan_config.py",
   "tests/test_fan_control_ipc.py",
   "tests/test_fan_curve.py",
+  "tests/test_fan_profiles.py",
+  "tests/test_fan_profile_review.py",
+  "tests/test_curve_editor.cjs",
   "tests/test_gestures.py",
   "tests/test_hardware.py",
   "tests/test_panel_metrics.py",
@@ -84,5 +87,7 @@
   "tests/test_web_review_logging.py",
   "ui_preview.py",
   "verify_integration_render.py",
-  "verify_render.py"
+  "verify_render.py",
+  "docs/atomic-writes.md",
+  "tests/test_command_validation.py"
 ]

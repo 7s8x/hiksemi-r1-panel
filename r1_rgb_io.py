@@ -8,6 +8,12 @@ I2C_SMBUS = 0x0720
 I2C_SMBUS_READ = 1
 I2C_SMBUS_BYTE_DATA = 2
 RGB_ADDRESS = 0x26
+I2C_SMBUS_WRITE = 0
+REG_MODE = 0x90
+REG_RED = 0x92
+REG_GREEN = 0x93
+REG_BLUE = 0x94
+REGISTERS = (REG_MODE, REG_RED, REG_GREEN, REG_BLUE)
 
 
 class SmbusData(ctypes.Union):
@@ -45,14 +51,6 @@ def read_byte_data(fd: int, register: int) -> int:
     ioctl_checked(fd, I2C_SMBUS, ctypes.byref(operation))
     return value.byte
 
-
-
-I2C_SMBUS_WRITE = 0
-REG_MODE = 0x90
-REG_RED = 0x92
-REG_GREEN = 0x93
-REG_BLUE = 0x94
-REGISTERS = (REG_MODE, REG_RED, REG_GREEN, REG_BLUE)
 
 
 def write_byte_data(fd: int, register: int, value: int) -> None:

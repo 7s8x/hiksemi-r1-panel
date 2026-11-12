@@ -17,17 +17,20 @@ def reading(cpu=62, drive=40, drives=4, fan2=995, fan3=2860):
 
 class FanCurveTests(unittest.TestCase):
     def setUp(self):
-        # Unit tests must never publish to an actual controller or consume its mode file.
-        for name, value in (("publish_status", None), ("requested_mode", "auto")):
+        # Unit tests must never publish to an actual controller or read real profiles.
+        for name, value in (("publish_status", None), ("requested_mode", "high")):
             patched = patch("r1_fan_curve." + name, return_value=value)
             patched.start()
             self.addCleanup(patched.stop)
         from tempfile import TemporaryDirectory
+        import r1_fan_config
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        config = patch("r1_fan_curve.CONFIG_FILE", Path(temporary.name) / "absent-curves.json")
-        config.start()
-        self.addCleanup(config.stop)
+        for attribute, filename in (("CONFIG_FILE", "absent-curves.json"),
+                                    ("LOW_CONFIG_FILE", "absent-curves-low.json")):
+            config = patch.object(r1_fan_config, attribute, Path(temporary.name) / filename)
+            config.start()
+            self.addCleanup(config.stop)
 
     def test_normal_temperature_keeps_baseline(self):
         self.assertEqual(target_pwm(reading(), 4), 120)
@@ -134,7 +137,8 @@ class FanCurveTests(unittest.TestCase):
             self, _sample, _clock, write, _mode, status, _restore):
         run(1, Path("/unused"))
         write.assert_called_once_with(Path("/unused"), 255, 255)
-        status.assert_called_once_with("full", 255, pwm2=255, pwm3=255, curve_id=__import__("r1_fan_config").digest(__import__("r1_fan_config").DEFAULT))
+        status.assert_called_once_with("full", 255, pwm2=255, pwm3=255,
+                                       curve_id=__import__("r1_fan_config").bundle_digest())
 
 
 if __name__ == "__main__":

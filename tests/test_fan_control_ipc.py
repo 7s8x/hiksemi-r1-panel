@@ -1,4 +1,4 @@
-"""Offline mode request and acknowledgement checks."""
+"""Offline mode request and acknowledgement checks for the three fan modes."""
 
 import json
 import sys
@@ -18,7 +18,7 @@ class FanControlIpcTests(unittest.TestCase):
             root = Path(temporary)
             mode_file = root / "mode"
             status_file = root / "status.json"
-            self.assertEqual(requested_mode(mode_file), "auto")
+            self.assertEqual(requested_mode(mode_file), "high")
             request_mode("full", mode_file)
             self.assertEqual(requested_mode(mode_file), "full")
             self.assertFalse(control_status(mode_file, status_file)["live"])
@@ -31,13 +31,50 @@ class FanControlIpcTests(unittest.TestCase):
             request_mode("full", mode_file)
             self.assertEqual(json.loads(mode_file.read_text())["expires_at"], first_expiry)
 
-    def test_full_request_expires_after_one_minute(self):
+    def test_full_request_expires_to_the_selected_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            mode_file = Path(temporary) / "mode"
+            request_mode("low", mode_file)
+            request_mode("full", mode_file)
+            record = json.loads(mode_file.read_text())
+            self.assertEqual(record["return_to"], "low")
+            record["expires_at"] = time.time() - 1
+            mode_file.write_text(json.dumps(record))
+            self.assertEqual(requested_mode(mode_file), "low")
+            self.assertEqual(requested_mode(mode_file, clear_expired=True), "low")
+            self.assertEqual(mode_file.read_text(), "low\n")
+
+    def test_full_request_from_high_expires_to_high(self):
         with tempfile.TemporaryDirectory() as temporary:
             mode_file = Path(temporary) / "mode"
             mode_file.write_text(json.dumps({"mode": "full", "expires_at": time.time() - 1}))
-            self.assertEqual(requested_mode(mode_file), "auto")
-            self.assertEqual(requested_mode(mode_file, clear_expired=True), "auto")
-            self.assertEqual(mode_file.read_text(), "auto\n")
+            self.assertEqual(requested_mode(mode_file), "high")
+            self.assertEqual(requested_mode(mode_file, clear_expired=True), "high")
+            self.assertEqual(mode_file.read_text(), "high\n")
+
+    def test_repeated_full_burst_does_not_lose_its_return_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            mode_file = Path(temporary) / "mode"
+            request_mode("low", mode_file)
+            request_mode("full", mode_file)
+            expired = json.loads(mode_file.read_text())
+            expired["expires_at"] = time.time() - 1
+            mode_file.write_text(json.dumps(expired))
+            # An expired burst is still "full" in storage; a new burst must keep low.
+            request_mode("full", mode_file)
+            self.assertEqual(json.loads(mode_file.read_text())["return_to"], "low")
+
+    def test_legacy_auto_requests_and_status_are_accepted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mode_file = root / "mode"
+            status_file = root / "status.json"
+            mode_file.write_text("auto\n")
+            self.assertEqual(requested_mode(mode_file), "high")
+            request_mode("auto", mode_file)
+            self.assertEqual(mode_file.read_text(), "high\n")
+            publish_status("auto", 120, status_file)
+            self.assertEqual(control_status(mode_file, status_file)["mode"], "high")
 
     def test_invalid_request_fails_high_and_stale_status_is_offline(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,8 +97,8 @@ class FanControlIpcTests(unittest.TestCase):
             path = Path(directory)
             mode = path / "mode"
             status_path = path / "status"
-            request_mode("auto", mode)
-            publish_status("auto", 200, status_path, pwm2=120, pwm3=200)
+            request_mode("high", mode)
+            publish_status("high", 200, status_path, pwm2=120, pwm3=200)
             result = control_status(mode, status_path)
             self.assertTrue(result["live"])
             self.assertEqual((result["pwm2"], result["pwm3"]), (120, 200))

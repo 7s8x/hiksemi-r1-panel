@@ -128,8 +128,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
         self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
-        self.assertIn("全速 1 分钟", fans)
-        self.assertIn("自动曲线", fans)
+        for label in ("全速", "标准", "静音"):
+            self.assertIn(label, fans)
+        self.assertIn("标准模式", fans)
         self.assertIn("打开灯光", fans)
         self.assertIn("关闭灯光", fans)
         self.assertIn("灯光已关闭", fans)
@@ -145,16 +146,16 @@ class WebTests(unittest.TestCase):
         self.assertTrue(any(node.attrib.get("x") == "94" and node.text == "47%" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "995" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "RPM" for node in fan_text))
-        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "自动" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "高速" for node in fan_text))
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")
-        self.assertIn("智能温控", web_fans)
+        self.assertIn("控制模式", web_fans)
         self.assertIn("机身 RGB", web_fans)
         self.assertNotIn("独立温控服务", web_fans)
-        self.assertNotIn("自动调节", web_fans)
+        self.assertIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("全速运行 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("全速散热 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -327,6 +328,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function outputPercent(pwm){return Math.round(pwm*100/255)}", source)
         self.assertIn("pct===outputPercent(point[1])?point[1]:Math.round(pct*255/100)", source)
         self.assertIn("cpu:readCurve('cpu'),drive:readCurve('drive')", source)
+        self.assertIn('id="curveProfile"', source)
+        self.assertIn("const profile=activeProfile,record={profile", source)
         self.assertEqual(preview_web_source(), source)
 
     def test_source_allowlist(self):
@@ -490,12 +493,14 @@ class LogTests(unittest.TestCase):
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
         cases = [({'live': False}, '温控服务离线'),
                  ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速运行 · 剩余 0 秒'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速运行'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '自动曲线运行中'),
-                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '自动曲线运行中')]
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速散热 · 剩余 0 秒'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速散热'),
+                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准模式'),
+                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音模式'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准模式'),
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '曲线状态未知'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '曲线状态未知'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '曲线状态未知')]
         for control, expected in cases:
             with self.subTest(control=control):
                 self.assertIn(expected.encode(), render_fans({'control': control}))

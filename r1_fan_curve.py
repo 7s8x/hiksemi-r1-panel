@@ -13,7 +13,7 @@ import time
 
 from r1_hardware import FanCurve, FanPoint
 from r1_fan_control_ipc import publish_status, requested_mode
-from r1_fan_config import CONFIG_FILE, DEFAULT, curves, digest, load
+from r1_fan_config import DEFAULT, PROFILES, bundle_digest, config_path, curves, load
 from r1_site_config import SITE, discover_bays, bay_states
 
 BASELINE_PWM = 120
@@ -199,24 +199,26 @@ def run(seconds: int, chip: Path) -> None:
         raise RuntimeError("PWM mode differs from verified manual/full-speed modes")
     deadline = None if seconds == 0 else time.monotonic() + seconds
     applied = (initial.pwm2, initial.pwm3)
-    previous_mode = None
-    active_curves = (CPU_CURVE, DRIVE_CURVE)
-    curve_id = digest(DEFAULT)
-    config_mtime = None
+    active_curves = {name: curves(DEFAULT, name) for name in PROFILES}
+    curve_id = bundle_digest({name: DEFAULT for name in PROFILES})
+    config_mtimes = {}
     print(f"curve_start={seconds}s drives={initial.drive_count}/{EXPECTED_DRIVES} "
           f"initial_pwm={initial.pwm2}/{initial.pwm3}", flush=True)
     try:
         while not STOP and (deadline is None or time.monotonic() < deadline):
-            try:
-                mtime = CONFIG_FILE.stat().st_mtime_ns
-            except OSError:
-                mtime = None
-            if mtime != config_mtime:
+            mtimes = {}
+            for name in PROFILES:
                 try:
-                    active_record = load(CONFIG_FILE)
-                    active_curves = curves(active_record)
-                    curve_id = digest(active_record)
-                    config_mtime = mtime
+                    mtimes[name] = config_path(name).stat().st_mtime_ns
+                except OSError:
+                    mtimes[name] = None
+            if mtimes != config_mtimes:
+                try:
+                    records = {name: load(profile=name) for name in PROFILES}
+                    candidate_curves = {name: curves(records[name], name) for name in PROFILES}
+                    candidate_id = bundle_digest(records)
+                    active_curves, curve_id = candidate_curves, candidate_id
+                    config_mtimes = mtimes
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     print(f"curve_config_rejected={error}", flush=True)
             reading = sample(chip)
@@ -224,16 +226,17 @@ def run(seconds: int, chip: Path) -> None:
                     and controllable_mode(reading.mode3, reading.pwm3)):
                 raise RuntimeError("PWM mode changed during trial")
             mode = requested_mode(clear_expired=True)
-            target = (255, 255) if mode == "full" else target_pwms(reading, EXPECTED_DRIVES, active_curves)
+            profile = mode if mode in PROFILES else "high"
+            target = ((255, 255) if mode == "full"
+                      else target_pwms(reading, EXPECTED_DRIVES, active_curves[profile]))
             applied = tuple(next_pwm(current, requested) for current, requested in zip(applied, target))
             set_channels(chip, *applied)
-            previous_mode = mode
             try:
                 publish_status(mode, max(applied), curve_id=curve_id, pwm2=applied[0], pwm3=applied[1])
             except OSError as error:
                 print(f"status_write_error={error}", flush=True)
             print(f"cpu={reading.cpu_c} drive={reading.drive_c} "
-                  f"fans={reading.fan2}/{reading.fan3} mode={mode} "
+                  f"fans={reading.fan2}/{reading.fan3} mode={mode} profile={profile} "
                   f"requested={target} applied={applied}", flush=True)
             for _ in range(1 if mode == "full" else 5):
                 if STOP or (deadline is not None and time.monotonic() >= deadline):

@@ -220,7 +220,6 @@ def nvme_identity():
 
 
 
-
 def drive_models(disks: tuple) -> list[str]:
     """Read model fields only; never derive a display label from by-id serials."""
     try:
@@ -240,7 +239,6 @@ def drive_models(disks: tuple) -> list[str]:
             model = "--"
         models.append(model)
     return [re.sub(r"\s+", " ", value)[:24].strip() or "--" for value in models]
-
 
 
 

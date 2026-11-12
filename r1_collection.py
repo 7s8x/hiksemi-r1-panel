@@ -120,7 +120,6 @@ def collect_fast():
     # Lazy imports keep readers independent of device/renderer initialization.
     import r1_host_sampling as panel
     from r1_storage_queries import disk_generation
-    from r1_host_sampling import drive_models
     disks = panel.discover_drives()
     generation = disk_generation(disks)
     nvmes = sorted(Path('/sys/block').glob('nvme*n*'))
@@ -140,7 +139,7 @@ def collect_fast():
             'mem_total': total, 'mem_used': used, 'uptime': uptime, 'nvme': nvme_temp,
             'storage': [(panel.nvme_identity(), nvme_temp)] + [(i, t) for _, i, t in rows],
             'drives': [(label, t) for label, _, t in rows], 'fans': panel.fan_readings(sample=sensors),
-            'storage_models': drive_models(disks), 'bay_states': states,
+            'storage_models': panel.drive_models(disks), 'bay_states': states,
             'fan_basis': sensors.temperatures(disks, states)}
     # Normalize once so in-memory generations compare exactly like JSON generations.
     return data, json.loads(json.dumps(token)), tuple(disks)

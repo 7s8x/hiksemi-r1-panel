@@ -1,5 +1,6 @@
 """Read-only preflight. Never loads a module or writes to hardware."""
 import argparse
+import ctypes.util
 import hashlib
 import json
 import os
@@ -42,8 +43,8 @@ def report():
         results["touch"] = False
     for command in ("pvesh", "pvesm", "qm", "chvt", "modinfo"):
         results["command_" + command] = shutil.which(command) is not None
-    results["cairo"] = __import__("ctypes.util", fromlist=["find_library"]).find_library("cairo") is not None
-    results["fontconfig"] = __import__("ctypes.util", fromlist=["find_library"]).find_library("fontconfig") is not None
+    results["cairo"] = ctypes.util.find_library("cairo") is not None
+    results["fontconfig"] = ctypes.util.find_library("fontconfig") is not None
     results["font"] = Path(__file__).with_name("assets").joinpath("fonts/NotoSansSC-VF.ttf").is_file()
     results["bay_states"] = list(bay_states(discover_bays()))
     results["bay_configuration"] = not any(s in ("missing", "unexpected") for s in results["bay_states"])
