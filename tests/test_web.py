@@ -151,7 +151,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")
         self.assertNotIn("控制模式", web_fans)
-        self.assertNotIn("机身 RGB", web_fans)
+        self.assertIn("机身 RGB", web_fans)
         self.assertNotIn("独立温控服务", web_fans)
         self.assertNotIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}

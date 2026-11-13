@@ -56,6 +56,7 @@
 
     <rect x="16" y="732" width="344" height="211" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="758" fill="#edf6f8" font-size="16" font-weight="700">灯光控制</text>
+    <text x="344" y="758" fill="#9bb1be" font-size="12" text-anchor="end">机身 RGB</text>
     <circle cx="48" cy="801" r="12" fill="{{RGB_SWATCH}}" fill-opacity="{{RGB_SWATCH_OPACITY}}"/>
     <text x="72" y="808" fill="{{RGB_COLOR}}" font-size="19" font-weight="700">{{RGB_STATUS}}</text>
     <rect x="32" y="882" width="100" height="45" rx="5" fill="{{RGB_BREATHE_BG}}"/>

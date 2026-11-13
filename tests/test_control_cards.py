@@ -21,10 +21,12 @@ class ControlCardTests(unittest.TestCase):
         root=ET.fromstring(render_fans(self.data()))
         cards=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='16' and n.get('width')=='344']
         self.assertEqual([(n.get('y'),n.get('height')) for n in cards],[('99','197'),('310','197'),('521','197'),('732','211')])
+        label=next(n for n in root.findall('.//s:text',NS) if n.text=='机身 RGB')
+        self.assertEqual((label.get('x'),label.get('y'),label.get('font-size'),label.get('text-anchor')),('344','758','12','end'))
         text=''.join(root.itertext())
         for removed in ('温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
             self.assertNotIn(removed,text)
-        for kept in ('双路温控','CPU 最高温度','硬盘最高温度','全速','标准','静音','呼吸','常亮','关闭'):
+        for kept in ('机身 RGB','双路温控','CPU 最高温度','硬盘最高温度','全速','标准','静音','呼吸','常亮','关闭'):
             self.assertIn(kept,text)
 
     def test_both_button_rows_match_physical_hit_regions_and_gaps(self):
