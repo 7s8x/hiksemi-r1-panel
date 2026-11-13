@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 202 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证
+- 当前源码的 203 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证
 
 ### 尚未验证
 
@@ -275,3 +275,5 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 原子替换、文件同步与运行状态有效期的边界见 [原子写语义说明](docs/atomic-writes.md)。
 
 控制页把温控依据与三档操作合并为197px高的风扇控制卡，灯光区211px高，提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
+
+登录后的实体屏实时镜像默认折叠，展开才获取PNG；收起或页面转入后台时停止取图，切页和亮度控制仍可直接使用。上方Web双页继续使用SVG。

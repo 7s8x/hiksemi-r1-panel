@@ -34,6 +34,7 @@ jobs:
         run: |
           node tests/test_curve_editor.cjs
           node tests/test_rgb_controls.cjs
+          node tests/test_mirror_polling.cjs
 
       - name: 检出已验证的渲染基线
         uses: actions/checkout@v4
@@ -66,3 +67,4 @@ jobs:
           python -I -S -B run_offline_tests.py
           node tests/test_curve_editor.cjs
           node tests/test_rgb_controls.cjs
+          node tests/test_mirror_polling.cjs

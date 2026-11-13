@@ -182,7 +182,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
         elif controller_state == "switching":
             status = "切换中"
         else:
-            status = {"high": "高速", "low": "低速", "full": "全速"}.get(controller_state, "未知")
+            status = {"high": "标准", "low": "静音", "full": "全速"}.get(controller_state, "未知")
         prefix = f"F{channel}_"
         values.update({
             prefix + "RPM": str(round(rpm)) if rpm is not None else "--",
@@ -194,7 +194,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
             prefix + "ARC": round(364 * percent / 100) if percent is not None else 0,
             prefix + "ARC_COLOR": arc_color,
             prefix + "STATUS": status,
-            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("高速", "低速", "全速") else "#f4b46f",
+            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("标准", "静音", "全速") else "#f4b46f",
         })
     if controller_state == 'offline':
         status_text, control_color = '温控服务离线', '#f4b46f'

@@ -91,5 +91,6 @@
   "docs/atomic-writes.md",
   "tests/test_command_validation.py",
   "tests/test_control_cards.py",
-  "tests/test_rgb_controls.cjs"
+  "tests/test_rgb_controls.cjs",
+  "tests/test_mirror_polling.cjs"
 ]

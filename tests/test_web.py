@@ -146,7 +146,7 @@ class WebTests(unittest.TestCase):
         self.assertTrue(any(node.attrib.get("x") == "94" and node.text == "47%" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "995" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "RPM" for node in fan_text))
-        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "高速" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "标准" for node in fan_text))
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")

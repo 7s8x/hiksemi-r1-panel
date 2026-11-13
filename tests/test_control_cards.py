@@ -24,7 +24,7 @@ class ControlCardTests(unittest.TestCase):
         text=''.join(root.itertext())
         for removed in ('温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
             self.assertNotIn(removed,text)
-        for kept in ('CPU 最高温度','硬盘最高温度','全速','标准','静音','呼吸','常亮','关闭'):
+        for kept in ('双路温控','CPU 最高温度','硬盘最高温度','全速','标准','静音','呼吸','常亮','关闭'):
             self.assertIn(kept,text)
 
     def test_both_button_rows_match_physical_hit_regions_and_gaps(self):
@@ -103,3 +103,13 @@ class ControlCardTests(unittest.TestCase):
         with patch.object(panel,'RGB',rgb),patch.object(panel.Path,'exists',return_value=True),patch.object(panel,'remember_rgb_state') as cache:
             with self.assertRaises(OSError):panel.select_rgb_effect('breathe')
         cache.assert_called_once_with(None)
+
+    def test_fan_information_labels_match_control_mode_and_faults_win(self):
+        for mode,label in [('high','标准'),('low','静音'),('full','全速')]:
+            with self.subTest(mode=mode):
+                root=ET.fromstring(render_fans(self.data(mode)))
+                statuses=[n.text for n in root.findall('.//s:text',NS) if n.get('x')=='329' and n.get('y') in ('257','468')]
+                self.assertEqual(statuses,[label,label])
+        data=self.data('low');data['fans']['fan2_input']=0
+        root=ET.fromstring(render_fans(data))
+        self.assertEqual(next(n.text for n in root.findall('.//s:text',NS) if n.get('x')=='329' and n.get('y')=='257'),'停转')

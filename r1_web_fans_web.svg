@@ -39,6 +39,7 @@
 
     <rect x="16" y="521" width="344" height="197" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="547" fill="#edf6f8" font-size="16" font-weight="700">风扇控制</text>
+    <text x="344" y="546" fill="#9bb1be" font-size="12" text-anchor="end">双路温控</text>
     <text x="32" y="577" fill="{{CONTROL_COLOR}}" font-size="18" font-weight="700">{{CONTROL_STATUS}}</text>
     <text x="32" y="595" fill="#9bb1be" font-size="11">{{CONTROL_DETAIL}}</text>
     <text x="46" y="610" fill="#9bb1be" font-size="12">CPU 最高温度</text>
