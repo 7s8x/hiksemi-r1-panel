@@ -81,10 +81,11 @@ class WebTests(unittest.TestCase):
         self.assertEqual(rasterize.call_count, 0)
         self.assertNotIn('panel', result)
         self.assertNotIn('fans', result)
-        self.assertIn(b"<svg", result["panel_svg"])
-        self.assertIn(b"<svg", result["fans_svg"])
-        self.assertIn(b"height=\"633\"", result["panel_svg"])
-        self.assertNotIn("虚拟机状态".encode(), result["panel_svg"])
+        self.assertNotIn('panel_svg', result)
+        self.assertNotIn('fans_svg', result)
+        self.assertIn('panel', result['values'])
+        self.assertIn('fans', result['values'])
+
 
     def test_web_views_escape_models_and_keep_fan_ring_semantics(self):
         data = {

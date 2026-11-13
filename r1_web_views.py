@@ -63,8 +63,8 @@ def _free_amount(size_bytes: int) -> str:
     return f"{size_bytes / 1_000_000_000_000:.2f}TB" if size_bytes >= 1_000_000_000_000 else f"{size_bytes / 1_000_000_000:.0f}GB"
 
 
-def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
-    """Render the shared current layout; web_layout remains a compatibility keyword."""
+def information_values(data: dict) -> dict:
+    """Format display fields without building an image or reading hardware."""
     values = _shared(data)
     usage = _number(data.get("cpu_usage"))
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
@@ -124,8 +124,12 @@ def render_information(data: dict, *, web_layout: bool = True, theme: str | None
         values[f"VM{index}_NAME"] = str(vmid)[:16]
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
         values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
-    template = "r1_web_information_web.svg"
-    return theme_svg(_template(template, values), theme)
+    return values
+
+
+def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
+    """Compatibility renderer, also used by the physical panel."""
+    return theme_svg(_template("r1_web_information_web.svg", information_values(data)), theme)
 
 
 _LEGACY_MODES = {"auto": "high"}
@@ -155,8 +159,8 @@ def valid_rgb_state(state):
     return None
 
 
-def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
-    """Render the shared current layout; web_layout remains a compatibility keyword."""
+def fan_values(data: dict) -> dict:
+    """Format display fields without building an image or reading hardware."""
     values = _shared(data)
     fans = data.get("fans") or {}
     control = data.get("control") or {}
@@ -243,5 +247,19 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
-    template = "r1_web_fans_web.svg"
+    values["RGB_SWATCH"] = swatch
+    return values
+
+
+def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
+    """Compatibility renderer, also used by the physical panel."""
+    return render_values("fans", fan_values(data), theme)
+
+
+def render_values(view, values, theme):
+    values = dict(values)
+    swatch = values.get("RGB_SWATCH", "#9bb1be")
+    if view == "fans":
+        values["RGB_SWATCH"] = "RGB_SWATCH_COLOR"
+    template = "r1_web_information_web.svg" if view == "panel" else "r1_web_fans_web.svg"
     return theme_svg(_template(template, values), theme).replace(b"RGB_SWATCH_COLOR", swatch.encode("ascii"))

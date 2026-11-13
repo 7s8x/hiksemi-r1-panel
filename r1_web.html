@@ -59,11 +59,11 @@
 </style>
 </head>
 <body>
-<section id="public" class="wrap"><div class="top"><div><h1>R1 状态看板</h1><div class="sub">信息页与风扇页 · 免登录只读</div></div><button id="showLogin">管理员登录</button></div><p class="hint">两个画面由只读数据独立生成，不切换实体屏；硬盘序列号已遮蔽，虚拟机只显示编号。硬盘已用及可用容量来自 PVE 存储统计和群晖单盘卷读数；读数缺失时显示 --。调整设置须登录。</p><div class="public-grid"><section class="card"><h2>信息页</h2><img id="publicPanel" class="public-screen" alt="R1 信息页只读状态"><p id="publicPanelStatus" class="hint">正在获取只读画面…</p></section><section class="card"><h2>风扇页</h2><img id="publicFans" class="public-screen" alt="R1 风扇页只读状态"><p id="publicFansStatus" class="hint">正在获取只读画面…</p></section></div><p class="hint">约每 15 秒刷新；数据采集异常时会显示不可用，不展示过期画面。</p></section>
+<section id="public" class="wrap"><div class="top"><div><h1>R1 状态看板</h1><div class="sub">信息页与风扇页 · 免登录只读</div></div><button id="showLogin">管理员登录</button></div><p class="hint">两个画面由只读数据独立生成，不切换实体屏；硬盘序列号已遮蔽，虚拟机只显示编号。硬盘已用及可用容量来自 PVE 存储统计和群晖单盘卷读数；读数缺失时显示 --。调整设置须登录。</p><div class="public-grid"><section class="card"><h2>信息页</h2><div id="publicPanel" class="public-screen" role="img" aria-label="R1 信息页只读状态"></div><p id="publicPanelStatus" class="hint">正在获取只读画面…</p></section><section class="card"><h2>风扇页</h2><div id="publicFans" class="public-screen" role="img" aria-label="R1 风扇页只读状态"></div><p id="publicFansStatus" class="hint">正在获取只读画面…</p></section></div><p class="hint">约每 15 秒局部更新；数据采集异常时会显示不可用，不展示过期画面。</p></section>
 <section id="login" class="card hide"><h1>R1 前屏管理</h1><p class="hint">仅供家庭网与 Tailscale 管理连接使用。请先核对 HTTPS 证书指纹。</p><div class="row"><input id="password" type="password" autocomplete="current-password" placeholder="管理员密码" style="flex:1"><button class="primary" id="loginButton">登录</button><button id="backPublic">返回只读看板</button></div><p id="loginMessage" class="status error"></p></section>
 <main id="app" class="wrap hide">
  <div class="top"><div><h1>R1 前屏管理</h1><div class="sub">实体屏实时镜像 · 风扇与灯光设置</div></div><div class="row"><label for="themeSelect">配色</label><select id="themeSelect" aria-label="Web 与实体屏配色"><option value="mocha">Catppuccin Mocha</option><option value="latte">Catppuccin Latte · 粉紫</option></select><button id="showPassword">修改密码</button><button id="logout">退出登录</button></div></div>
- <div class="public-grid"><section class="card"><h2>Web 信息页</h2><img id="webPanel" class="public-screen" alt="R1 Web 信息页只读状态"><p id="webPanelStatus" class="hint">正在获取只读画面…</p></section><section class="card"><h2>Web 风扇页</h2><div class="web-fan-wrap"><img id="webFans" class="public-screen" alt="R1 Web 风扇状态与快捷控制"><button id="webFanFull" class="web-fan-hit fan fan1" type="button" aria-label="全速 1 分钟" title="全速 1 分钟"></button><button id="webFanHigh" class="web-fan-hit fan fan2" type="button" aria-label="切换到标准曲线" title="切换到标准曲线"></button><button id="webFanLow" class="web-fan-hit fan fan3" type="button" aria-label="切换到静音曲线" title="切换到静音曲线"></button><button id="webRgbBreathe" class="web-fan-hit rgb rgb1" type="button" disabled aria-label="呼吸灯效" title="呼吸灯效"></button><button id="webRgbSteady" class="web-fan-hit rgb rgb2" type="button" disabled aria-label="常亮灯效" title="常亮灯效"></button><button id="webRgbOff" class="web-fan-hit rgb rgb3" type="button" disabled aria-label="关闭灯光" title="关闭灯光"></button></div><p id="webFansStatus" class="hint">正在获取画面与控制状态…</p></section></div><p class="hint">Web 信息页只读、容量来自 PVE 与群晖卷读数；登录后风扇页可直接操作风扇与 RGB 按钮，不切换实体屏。实体屏镜像和详细设置位于下方。</p>
+ <div class="public-grid"><section class="card"><h2>Web 信息页</h2><div id="webPanel" class="public-screen" role="img" aria-label="R1 Web 信息页只读状态"></div><p id="webPanelStatus" class="hint">正在获取只读画面…</p></section><section class="card"><h2>Web 风扇页</h2><div class="web-fan-wrap"><div id="webFans" class="public-screen" role="img" aria-label="R1 Web 风扇状态与快捷控制"></div><button id="webFanFull" class="web-fan-hit fan fan1" type="button" aria-label="全速 1 分钟" title="全速 1 分钟"></button><button id="webFanHigh" class="web-fan-hit fan fan2" type="button" aria-label="切换到标准曲线" title="切换到标准曲线"></button><button id="webFanLow" class="web-fan-hit fan fan3" type="button" aria-label="切换到静音曲线" title="切换到静音曲线"></button><button id="webRgbBreathe" class="web-fan-hit rgb rgb1" type="button" disabled aria-label="呼吸灯效" title="呼吸灯效"></button><button id="webRgbSteady" class="web-fan-hit rgb rgb2" type="button" disabled aria-label="常亮灯效" title="常亮灯效"></button><button id="webRgbOff" class="web-fan-hit rgb rgb3" type="button" disabled aria-label="关闭灯光" title="关闭灯光"></button></div><p id="webFansStatus" class="hint">正在获取画面与控制状态…</p></section></div><p class="hint">Web 信息页只读、容量来自 PVE 与群晖卷读数；登录后风扇页可直接操作风扇与 RGB 按钮，不切换实体屏。实体屏镜像和详细设置位于下方。</p>
  <section id="passwordCard" class="card hide"><h2>修改管理员密码</h2><p class="hint">新密码至少 8 个字符；建议使用更长的随机密码。保存后所有设备的 Web 会话都会退出，需要使用新密码重新登录。</p><div class="row"><input id="currentPassword" type="password" autocomplete="current-password" placeholder="当前密码"><input id="newPassword" type="password" autocomplete="new-password" placeholder="新密码（8–256 字符）"><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入新密码"></div><div class="row"><button id="savePassword" class="primary">保存新密码</button><button id="cancelPassword">取消</button></div><div id="passwordMessage" class="status" role="status"></div></section>
  <div class="grid">
   <section>
@@ -97,8 +97,69 @@ $('loginButton').onclick=login;$('password').onkeydown=e=>{if(e.key==='Enter')lo
 $('logout').onclick=async()=>{try{await api('/api/logout',{})}catch(_){}location.reload()};
 $('showLogin').onclick=()=>{$('public').classList.add('hide');$('login').classList.remove('hide');$('password').focus()};
 $('backPublic').onclick=()=>{$('password').value='';$('loginMessage').textContent='';$('login').classList.add('hide');$('public').classList.remove('hide');refreshWebViews()};
-function refreshWebViews(){if(document.hidden)return;const token=Date.now();for(const [section,prefix] of [['public','public'],['app','web']]){if($(section).classList.contains('hide'))continue;for(const [name,id] of [['panel',prefix+'Panel'],['fans',prefix+'Fans']])$(id).src='/public/'+name+'.svg?t='+token}}
-for(const id of ['publicPanel','publicFans','webPanel','webFans']){const image=$(id),status=$(id+'Status');image.onload=()=>{status.textContent=id==='webFans'?'快捷控制 · 自动刷新':'只读画面 · 自动刷新'};image.onerror=()=>{image.removeAttribute('src');status.textContent='数据暂不可用，请稍后刷新'}}
+// Incremental public SVG: fixed nodes mount once, values update without markup.
+const webDocuments=new Map();
+let webLayout=null, webViewsBusy=false, webViewsAgain=false, webExpiry=null;
+function clearWebViews(){
+  for(const id of ['publicPanel','publicFans','webPanel','webFans']){
+    $(id).style.visibility='hidden';
+    $(id+'Status').textContent='数据暂不可用，请稍后刷新';
+  }
+}
+function applyWebValues(host, page, values, identity){
+  if(!Array.isArray(values)||values.length!==page.bindings.length)throw Error('invalid display');
+  let state=webDocuments.get(host);
+  if(!state||state.identity!==identity){
+    const parsed=new DOMParser().parseFromString(page.svg,'image/svg+xml');
+    if(parsed.querySelector('parsererror'))throw Error('invalid layout');
+    const svg=document.importNode(parsed.documentElement,true);
+    svg.style.width='100%';svg.style.height='auto';svg.style.display='block';
+    const slots=page.bindings.map(([id,attr])=>{
+      const node=svg.querySelector('[id="'+id+'"]');
+      if(!node)throw Error('missing display slot');
+      return {node,attr};
+    });
+    host.replaceChildren(svg);
+    state={identity,slots,values:[]};webDocuments.set(host,state);
+  }
+  for(let i=0;i<values.length;i++){
+    const value=values[i];
+    if(typeof value!=='string')throw Error('invalid display value');
+    if(state.values[i]===value)continue;
+    const {node,attr}=state.slots[i];
+    if(attr==='text')node.firstChild.nodeValue=value;
+    else node.setAttribute(attr,value);
+  }
+  state.values=values.slice();host.style.visibility='visible';
+}
+async function displayJson(url){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+  try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});
+    if(!response.ok)throw Error('display unavailable');return await response.json();
+  }finally{clearTimeout(timer)}
+}
+async function refreshWebViews(){
+  if(document.hidden)return;
+  if(webViewsBusy){webViewsAgain=true;return}
+  webViewsBusy=true;const started=performance.now();
+  try{
+    const data=await displayJson('/public/state.json');
+    if(!webLayout||webLayout.id!==data.id)webLayout=await displayJson('/public/layout.json');
+    const remaining=data.valid_for*1000-(performance.now()-started);
+    if(webLayout.id!==data.id||!Number.isFinite(remaining)||remaining<=0||document.hidden)throw Error('expired display');
+    for(const [section,prefix] of [['public','public'],['app','web']]){
+      if($(section).classList.contains('hide'))continue;
+      for(const [view,suffix] of [['panel','Panel'],['fans','Fans']]){
+        const id=prefix+suffix;
+        applyWebValues($(id),webLayout.pages[view],data.pages[view],data.id);
+        $(id+'Status').textContent=id==='webFans'?'快捷控制 · 局部更新':'只读画面 · 局部更新';
+      }
+    }
+    clearTimeout(webExpiry);webExpiry=setTimeout(clearWebViews,remaining);
+  }catch(error){clearWebViews()}
+  finally{webViewsBusy=false;if(webViewsAgain){webViewsAgain=false;refreshWebViews()}}
+}
+document.addEventListener('visibilitychange',()=>{clearWebViews();if(!document.hidden)refreshWebViews()});
 syncTheme().finally(refreshWebViews);setInterval(async()=>{await syncTheme();refreshWebViews()},15000);
 function clearPasswordForm(){for(const id of ['currentPassword','newPassword','confirmPassword'])$(id).value='';$('passwordMessage').textContent=''}
 $('showPassword').onclick=()=>{$('passwordCard').classList.remove('hide');$('currentPassword').focus();$('passwordCard').scrollIntoView({behavior:'smooth',block:'start'})};

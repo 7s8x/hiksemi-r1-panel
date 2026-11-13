@@ -35,6 +35,7 @@ jobs:
           node tests/test_curve_editor.cjs
           node tests/test_rgb_controls.cjs
           node tests/test_mirror_polling.cjs
+          node tests/test_web_dom.cjs
 
       - name: 检出已验证的渲染基线
         uses: actions/checkout@v4
@@ -68,3 +69,4 @@ jobs:
           node tests/test_curve_editor.cjs
           node tests/test_rgb_controls.cjs
           node tests/test_mirror_polling.cjs
+          node tests/test_web_dom.cjs
