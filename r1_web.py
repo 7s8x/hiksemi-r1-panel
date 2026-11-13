@@ -36,7 +36,7 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
-from r1_web_views import render_fans, render_information
+from r1_web_views import render_fans, render_information, valid_rgb_state
 from r1_collection import read_snapshot
 from r1_svg_painter import paint_svg
 from r1_public_frames import PngCache
@@ -297,10 +297,13 @@ def public_snapshot() -> dict:
     data['clock'] = time.strftime('%H:%M')
     data['control'] = control_status()
     data['rgb'] = None
+    data['rgb_state'] = None
     try:
         response = request({'action': 'rgb_state', 'value': None})
-        if response.get('ok') and isinstance(response.get('rgb'), list):
-            data['rgb'] = response['rgb'][0] != 0
+        state = valid_rgb_state(response.get('rgb')) if response.get('ok') else None
+        if state is not None:
+            data['rgb_state'] = state
+            data['rgb'] = state[0] != 0
     except (OSError, ValueError, TypeError, KeyError):
         pass
     return data
