@@ -36,7 +36,9 @@ from r1_fan_control_ipc import control_status, request_mode
 from r1_panel_runtime import SnapshotCollector, read_state, request
 import r1_panel_repository as panel_repo
 from r1_panel_repository import HEIGHT, WIDTH, framebuffer_info
-from r1_web_views import render_fans, render_information
+from r1_web_views import (render_fans, render_information, valid_rgb_state,
+                          information_values, fan_values, render_values)
+from r1_web_dom import document_layout, project
 from r1_collection import read_snapshot
 from r1_svg_painter import paint_svg
 from r1_public_frames import PngCache
@@ -297,23 +299,26 @@ def public_snapshot() -> dict:
     data['clock'] = time.strftime('%H:%M')
     data['control'] = control_status()
     data['rgb'] = None
+    data['rgb_state'] = None
     try:
         response = request({'action': 'rgb_state', 'value': None})
-        if response.get('ok') and isinstance(response.get('rgb'), list):
-            data['rgb'] = response['rgb'][0] != 0
+        state = valid_rgb_state(response.get('rgb')) if response.get('ok') else None
+        if state is not None:
+            data['rgb_state'] = state
+            data['rgb'] = state[0] != 0
     except (OSError, ValueError, TypeError, KeyError):
         pass
     return data
 
 
 def collect_public_frames() -> dict:
-    """Publish only SVGs; PNG rasterization is deferred until a request needs it."""
+    """Format public display fields only; compatibility images are requested lazily."""
     data = public_snapshot()
     freshness = data.get('freshness')
     if freshness is not None and not freshness.get('valid'):
         raise RuntimeError('shared display unavailable')
-    frames = {"panel_svg": render_information(data),
-              "fans_svg": render_fans(data)}
+    frames = {"values": {"panel": information_values(data), "fans": fan_values(data)},
+              "theme": load_theme()}
     frames['groups'] = dict((freshness or {}).get('groups', {}))
     frames['updated'] = time.time()
     return frames
@@ -332,21 +337,62 @@ def encode_public_png(svg):
 PUBLIC_PNG = PngCache(encode_public_png)
 
 
+PUBLIC_SVG = PngCache(lambda source: render_values(source[0], dict(source[2]), source[1]))
+
+
+def current_public_frame(*, check_groups=True):
+    frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
+    if (not 0 <= time.time() - frames.get('updated', 0) <= 45
+            or frames.get('freshness', {}).get('valid') is False):
+        raise RuntimeError('public display unavailable')
+    groups = frames.get('groups')
+    if check_groups and groups is not None:
+        health = read_snapshot().get('freshness', {})
+        if not health.get('valid') or health.get('groups', {}) != groups:
+            raise RuntimeError('shared display unavailable')
+    return frames
+
+
+PUBLIC_DOCUMENT_LOCK = threading.Lock()
+PUBLIC_DOCUMENT_CACHE = None
+
+
+def projected_pages(frames, spec):
+    """Keep only the latest projection; coalesce clients without caching health."""
+    global PUBLIC_DOCUMENT_CACHE
+    key = (spec['id'], frames['updated'])
+    with PUBLIC_DOCUMENT_LOCK:
+        if PUBLIC_DOCUMENT_CACHE is None or PUBLIC_DOCUMENT_CACHE[0] != key:
+            pages = {view: project(view, frames['values'][view], frames['theme'])
+                     for view in ('panel', 'fans')}
+            PUBLIC_DOCUMENT_CACHE = (key, pages)
+        return PUBLIC_DOCUMENT_CACHE[1]
+
+
+def public_document(include_layout=False):
+    frames = current_public_frame()
+    theme = frames['theme']
+    spec = document_layout(theme)
+    if include_layout:
+        return spec
+    result = {'id': spec['id'], 'theme': theme,
+              'pages': projected_pages(frames, spec),
+              'valid_for': max(0, min(30, 45 - (time.time() - frames['updated'])))}
+    # Recheck the in-memory worker after projection, without reading the file twice.
+    # Every request, including cache hits, has already checked current group health.
+    if current_public_frame(check_groups=False).get('updated') != frames['updated']:
+        raise RuntimeError('public display changed')
+    return result
+
+
 def public_image(view, svg=False):
-    """Validate before and after expensive work; a cache hit never renews health."""
+    """A compatibility request builds SVG lazily; cache hits never renew health."""
     def current():
-        frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
-        if (not 0 <= time.time() - frames.get('updated', 0) <= 45
-                or frames.get('freshness', {}).get('valid') is False
-                or view + '_svg' not in frames):
-            raise RuntimeError('public display unavailable')
-        # The frame worker runs every 15s; a bounded file read also catches a
-        # collector failure/expired group between those refreshes, without queries.
-        groups = frames.get('groups')
-        if groups is not None:
-            health = read_snapshot().get('freshness', {})
-            if not health.get('valid') or health.get('groups', {}) != groups:
-                raise RuntimeError('shared display unavailable')
+        frames = current_public_frame()
+        if 'values' in frames:
+            source = (view, frames['theme'], tuple(frames['values'][view].items()))
+            return PUBLIC_SVG.get(view, source)
+        # Accept existing frame providers during rolling upgrades.
         return frames[view + '_svg']
 
     for _ in range(2):
@@ -618,6 +664,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/theme":
             self._json(200, {"theme": load_theme(), "choices": SELECTABLE_THEMES})
+            return
+        if path in ("/public/state.json", "/public/layout.json"):
+            if not PUBLIC_READONLY and self._session() is None:
+                self._json(401, {"error": "login required"})
+                return
+            try:
+                data = public_document(include_layout=path.endswith('layout.json'))
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+                self._json(503, {"error": "public display unavailable"})
+                return
+            self._json(200, data)
             return
         if path in ("/public/panel.png", "/public/fans.png",
                     "/public/panel.svg", "/public/fans.svg"):

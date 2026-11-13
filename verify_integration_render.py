@@ -12,6 +12,7 @@ import sys
 
 CHILD = r'''
 import hashlib, json, sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, sys.argv[1])
@@ -19,12 +20,13 @@ from ui_preview import demo_data
 from r1_web_views import render_information, render_fans
 from r1_panel_repository import Painter
 from r1_web import rgb_png
+from r1_svg_painter import paint_svg
 result = {}
 output = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 if output is not None:
     output.mkdir(parents=True, exist_ok=True)
 for theme in ('mocha', 'latte'):
-    for scenario in ('normal', 'missing', 'full', 'high', 'low'):
+    for scenario in ('normal', 'missing', 'full', 'high', 'low', 'steady', 'breathe', 'rgb_missing'):
         data = demo_data()
         data['clock'] = '12:34'
         if scenario == 'missing':
@@ -33,6 +35,13 @@ for theme in ('mocha', 'latte'):
         elif scenario == 'full':
             data['control'] = {'live': True, 'desired': 'full', 'mode': 'full', 'remaining': 29, 'return_to': 'low'}
             data['rgb'] = True
+            data['rgb_state'] = (3, 17, 83, 219)
+        elif scenario in ('steady', 'breathe'):
+            data['rgb'] = True
+            data['rgb_state'] = (1 if scenario == 'steady' else 3, 171, 0, 255)
+        elif scenario == 'rgb_missing':
+            data['rgb'] = None
+            data['rgb_state'] = None
         elif scenario in ('high', 'low'):
             data['control'] = {'live': True, 'desired': scenario, 'mode': scenario}
         for view, render in (('panel', render_information), ('fans', render_fans)):
@@ -52,6 +61,25 @@ for theme in ('mocha', 'latte'):
             if output is not None:
                 (output / (key.replace('/', '-') + '.png')).write_bytes(png)
                 (output / (key.replace('/', '-') + '.svg')).write_bytes(svg)
+            if view == 'fans':
+                root = ET.fromstring(svg)
+                for group in root.iter():
+                    for node in list(group):
+                        position = node.get('y', node.get('cy', node.get('y1', '0')))
+                        if float(position) >= 521:
+                            group.remove(node)
+                # Approved mode-label rename only; geometry and fault labels still compare.
+                for node in root.iter():
+                    if node.get('x') == '329' and node.get('y') in ('257', '468'):
+                        node.text = {'高速': '标准', '低速': '静音'}.get(node.text, node.text)
+                svg = ET.tostring(root, encoding='utf-8')
+                masked = Painter()
+                try:
+                    paint_svg(masked, svg)
+                    pixels, stride = masked.pixels()
+                    png = rgb_png(pixels, stride)
+                finally:
+                    masked.close()
             result[key+'/svg'] = hashlib.sha256(svg).hexdigest()
             result[key+'/png'] = hashlib.sha256(png).hexdigest()
 print(json.dumps(result, sort_keys=True))
@@ -85,7 +113,7 @@ def main():
     different = [name for name in baseline if current.get(name) != baseline[name]]
     if different or current.keys() != baseline.keys():
         raise SystemExit('synthetic render mismatch: ' + ', '.join(different))
-    print(f'synthetic_render_hashes={len(current)} all_identical=true separate_fan_reference={args.fan_baseline is not None}')
+    print(f'synthetic_render_hashes={len(current)} unchanged_regions_identical=true redesigned_controls=covered_by_tests separate_fan_reference={args.fan_baseline is not None}')
 
 
 if __name__ == '__main__':

@@ -63,8 +63,8 @@ def _free_amount(size_bytes: int) -> str:
     return f"{size_bytes / 1_000_000_000_000:.2f}TB" if size_bytes >= 1_000_000_000_000 else f"{size_bytes / 1_000_000_000:.0f}GB"
 
 
-def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
-    """Render the shared current layout; web_layout remains a compatibility keyword."""
+def information_values(data: dict) -> dict:
+    """Format display fields without building an image or reading hardware."""
     values = _shared(data)
     usage = _number(data.get("cpu_usage"))
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
@@ -124,8 +124,12 @@ def render_information(data: dict, *, web_layout: bool = True, theme: str | None
         values[f"VM{index}_NAME"] = str(vmid)[:16]
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
         values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
-    template = "r1_web_information_web.svg"
-    return theme_svg(_template(template, values), theme)
+    return values
+
+
+def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
+    """Compatibility renderer, also used by the physical panel."""
+    return theme_svg(_template("r1_web_information_web.svg", information_values(data)), theme)
 
 
 _LEGACY_MODES = {"auto": "high"}
@@ -146,8 +150,17 @@ def _controller_state(control):
     return mode if mode in ('high', 'low', 'full') else 'unknown'
 
 
-def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
-    """Render the shared current layout; web_layout remains a compatibility keyword."""
+def valid_rgb_state(state):
+    """Only four validated bytes may enter the display's RGB projection."""
+    if (isinstance(state, (list, tuple)) and len(state) == 4
+            and all(type(v) is int and 0 <= v <= 255 for v in state)
+            and state[0] in (0, 1, 2, 3)):
+        return tuple(state)
+    return None
+
+
+def fan_values(data: dict) -> dict:
+    """Format display fields without building an image or reading hardware."""
     values = _shared(data)
     fans = data.get("fans") or {}
     control = data.get("control") or {}
@@ -173,7 +186,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
         elif controller_state == "switching":
             status = "切换中"
         else:
-            status = {"high": "高速", "low": "低速", "full": "全速"}.get(controller_state, "未知")
+            status = {"high": "标准", "low": "静音", "full": "全速"}.get(controller_state, "未知")
         prefix = f"F{channel}_"
         values.update({
             prefix + "RPM": str(round(rpm)) if rpm is not None else "--",
@@ -185,7 +198,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
             prefix + "ARC": round(364 * percent / 100) if percent is not None else 0,
             prefix + "ARC_COLOR": arc_color,
             prefix + "STATUS": status,
-            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("高速", "低速", "全速") else "#f4b46f",
+            prefix + "STATUS_COLOR": "#9ee8ce" if status in ("标准", "静音", "全速") else "#f4b46f",
         })
     if controller_state == 'offline':
         status_text, control_color = '温控服务离线', '#f4b46f'
@@ -204,8 +217,7 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
     active_bg, active_fg = "#71d4b7", "#0b121b"
     idle_bg, idle_fg = "#244354", "#edf6f8"
     detail = ('结束后返回' + {'high': '标准模式', 'low': '静音模式', 'auto': '标准模式'}.get(control.get('return_to'), '原有模式')
-              if full_active else '根据温度自动调节风量' if high_active else
-              '优先降低噪音 · 高温自动提速' if low_active else '请核对温控服务状态')
+              if full_active else '')
     values.update(CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG="#6bbfe5" if full_active else idle_bg,
@@ -214,13 +226,18 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
                   HIGH_BUTTON_FG=active_fg if high_active else idle_fg,
                   LOW_BUTTON_BG="#6bbfe5" if low_active else idle_bg,
                   LOW_BUTTON_FG=active_fg if low_active else idle_fg)
-    rgb = data.get("rgb")
-    values.update(RGB_STATUS="灯光已开启" if rgb is True else "灯光已关闭" if rgb is False else "灯光状态不可用",
-                  RGB_COLOR="#71d4b7" if rgb is True else "#9bb1be" if rgb is False else "#f4b46f",
-                  RGB_ON_BUTTON_BG=active_bg if rgb is True else idle_bg,
-                  RGB_ON_BUTTON_FG=active_fg if rgb is True else idle_fg,
-                  RGB_OFF_BUTTON_BG=active_bg if rgb is False else idle_bg,
-                  RGB_OFF_BUTTON_FG=active_fg if rgb is False else idle_fg)
+    rgb_state = valid_rgb_state(data.get("rgb_state"))
+    mode = rgb_state[0] if rgb_state is not None else (0 if data.get("rgb") is False else None)
+    rgb_status = {0: "灯光已关闭", 1: "常亮", 2: "彩虹", 3: "呼吸"}.get(mode, "灯光已开启" if data.get("rgb") is True else "灯光状态不可用")
+    swatch = ("#%02x%02x%02x" % tuple(rgb_state[1:])) if mode in (1, 3) else "#9bb1be"
+    values.update(RGB_STATUS=rgb_status, RGB_COLOR="#9bb1be" if mode == 0 else "#edf6f8" if mode is not None else "#f4b46f",
+                  RGB_SWATCH="RGB_SWATCH_COLOR", RGB_SWATCH_OPACITY=1 if mode in (1, 3) else 0,
+                  RGB_BREATHE_BG="#6bbfe5" if mode == 3 else idle_bg,
+                  RGB_BREATHE_FG=active_fg if mode == 3 else idle_fg,
+                  RGB_STEADY_BG="#6bbfe5" if mode == 1 else idle_bg,
+                  RGB_STEADY_FG=active_fg if mode == 1 else idle_fg,
+                  RGB_OFF_BUTTON_BG="#6bbfe5" if mode == 0 else idle_bg,
+                  RGB_OFF_BUTTON_FG=active_fg if mode == 0 else idle_fg)
     basis = data.get("fan_basis")
     if not isinstance(basis, (tuple, list)) or len(basis) != 3:
         basis = (None, None, 0)
@@ -230,5 +247,19 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
-    template = "r1_web_fans_web.svg"
-    return theme_svg(_template(template, values), theme)
+    values["RGB_SWATCH"] = swatch
+    return values
+
+
+def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
+    """Compatibility renderer, also used by the physical panel."""
+    return render_values("fans", fan_values(data), theme)
+
+
+def render_values(view, values, theme):
+    values = dict(values)
+    swatch = values.get("RGB_SWATCH", "#9bb1be")
+    if view == "fans":
+        values["RGB_SWATCH"] = "RGB_SWATCH_COLOR"
+    template = "r1_web_information_web.svg" if view == "panel" else "r1_web_fans_web.svg"
+    return theme_svg(_template(template, values), theme).replace(b"RGB_SWATCH_COLOR", swatch.encode("ascii"))

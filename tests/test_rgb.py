@@ -33,10 +33,10 @@ class RgbTrialTests(unittest.TestCase):
                 rgb_bus_path(adapter)
 
     def test_screen_button_bounds(self):
-        self.assertEqual(rgb_button_action((100, 905)), "on")
+        self.assertEqual(rgb_button_action((100, 905)), "breathe")
         self.assertEqual(rgb_button_action((280, 905)), "off")
         self.assertIsNone(rgb_button_action((280, 850)))
-        self.assertIsNone(rgb_button_action((188, 918)))
+        self.assertEqual(rgb_button_action((188, 918)), "steady")
 
     @patch("r1_rgb_control.os.close")
     @patch("r1_rgb_control.write_byte_data")
