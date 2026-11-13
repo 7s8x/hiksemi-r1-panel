@@ -2,6 +2,7 @@
 import json
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
 from urllib.error import HTTPError
@@ -33,6 +34,44 @@ def canonical(root):
 
 
 class WebDomTests(unittest.TestCase):
+    def test_projection_shared_by_clients_but_health_checked_once_each_request(self):
+        frame = {'values': {'panel': information_values({}), 'fans': fan_values({})},
+                 'theme': 'mocha', 'groups': {}, 'updated': 100.0}
+        worker = Mock(); worker.latest.return_value = (frame, 1)
+        with patch.object(web, 'PUBLIC_COLLECTOR', worker), \
+             patch.object(web, 'PUBLIC_DOCUMENT_CACHE', None), \
+             patch.object(web, 'read_snapshot', return_value={'freshness': {'valid': True, 'groups': {}}}) as health, \
+             patch.object(web, 'project', wraps=web.project) as project_mock, \
+             patch.object(web.time, 'time', return_value=120.0):
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results = list(pool.map(lambda _: web.public_document(), range(8)))
+            self.assertEqual(health.call_count, 8)
+            self.assertEqual(project_mock.call_count, 2, 'one projection per page, not per client')
+            self.assertTrue(all(r == results[0] for r in results))
+            with patch.object(web.time, 'time', return_value=140.0):
+                self.assertEqual(web.public_document()['valid_for'], 5)
+            self.assertEqual(project_mock.call_count, 2, 'cache must not preserve old TTL')
+            health.return_value = {'freshness': {'valid': False}}
+            with self.assertRaises(RuntimeError): web.public_document()
+            self.assertEqual(project_mock.call_count, 2)
+            health.return_value = {'freshness': {'valid': True, 'groups': {}}}
+            frame['updated'] = 101.0
+            web.public_document()
+            self.assertEqual(project_mock.call_count, 4)
+            frame['theme'] = 'latte'
+            web.public_document()
+            self.assertEqual(project_mock.call_count, 6, 'layout change invalidates even at same timestamp')
+
+    def test_worker_failure_during_projection_does_not_return_cached_document(self):
+        frame = {'values': {'panel': information_values({}), 'fans': fan_values({})},
+                 'theme': 'mocha', 'groups': {}, 'updated': time.time()}
+        worker = Mock(); worker.latest.side_effect = [(frame, 1), ({'freshness': {'valid': False}}, 2)]
+        with patch.object(web, 'PUBLIC_COLLECTOR', worker), \
+             patch.object(web, 'PUBLIC_DOCUMENT_CACHE', None), \
+             patch.object(web, 'read_snapshot', return_value={'freshness': {'valid': True, 'groups': {}}}) as health:
+            with self.assertRaises(RuntimeError): web.public_document()
+            health.assert_called_once()
+
     def test_http_protocol_preserves_public_switch_auth_and_expiry(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), web.Handler)
         thread = threading.Thread(target=server.serve_forever,

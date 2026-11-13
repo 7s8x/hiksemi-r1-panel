@@ -99,8 +99,9 @@ $('showLogin').onclick=()=>{$('public').classList.add('hide');$('login').classLi
 $('backPublic').onclick=()=>{$('password').value='';$('loginMessage').textContent='';$('login').classList.add('hide');$('public').classList.remove('hide');refreshWebViews()};
 // Incremental public SVG: fixed nodes mount once, values update without markup.
 const webDocuments=new Map();
-let webLayout=null, webViewsBusy=false, webViewsAgain=false, webExpiry=null;
+let webLayout=null, webViewsBusy=false, webViewsAgain=false, webExpiry=null, webRenewal=null;
 function clearWebViews(){
+  clearTimeout(webExpiry);clearTimeout(webRenewal);webExpiry=null;webRenewal=null;
   for(const id of ['publicPanel','publicFans','webPanel','webFans']){
     $(id).style.visibility='hidden';
     $(id+'Status').textContent='数据暂不可用，请稍后刷新';
@@ -155,7 +156,11 @@ async function refreshWebViews(){
         $(id+'Status').textContent=id==='webFans'?'快捷控制 · 局部更新':'只读画面 · 局部更新';
       }
     }
-    clearTimeout(webExpiry);webExpiry=setTimeout(clearWebViews,remaining);
+    clearTimeout(webExpiry);clearTimeout(webRenewal);
+    webExpiry=setTimeout(clearWebViews,remaining);
+    // Normal polling has 15s headroom. A near-expiry response gets an early retry;
+    // the original expiry still wins if that request stalls or returns old data.
+    if(remaining<20000)webRenewal=setTimeout(refreshWebViews,Math.max(1000,remaining-5000));
   }catch(error){clearWebViews()}
   finally{webViewsBusy=false;if(webViewsAgain){webViewsAgain=false;refreshWebViews()}}
 }
@@ -221,14 +226,24 @@ $('webRgbBreathe').onclick=()=>setWebRgbMode(3);$('webRgbSteady').onclick=()=>se
 $('rgbColor').oninput=()=>{rgbDraftDirty=true};
 $('rgbApply').onclick=()=>{const color=$('rgbColor').value;setRgb(Number($('rgbMode').value),[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)])};
 let rgbRefreshed=0;
-function clearMirror(){ $('screen').removeAttribute('src') }
+let mirrorTimer=null,mirrorPanel=null,mirrorKey=null;
+function clearMirror(){
+ clearTimeout(mirrorTimer);mirrorTimer=null;mirrorPanel=null;mirrorKey=null;
+ $('screen').removeAttribute('src');
+}
 function updateMirror(panel){
  if(!panel||!$('mirrorDetails').open||document.hidden||$('app').classList.contains('hide')){clearMirror();return}
+ mirrorPanel=panel;
+ const key=JSON.stringify([panel.state,panel.brightness]);
+ if(mirrorTimer!==null&&key===mirrorKey)return;
+ clearTimeout(mirrorTimer);mirrorKey=key;
  $('screen').src='/api/frame.png?t='+Date.now();
+ mirrorTimer=setTimeout(()=>{mirrorTimer=null;updateMirror(mirrorPanel)},5000);
 }
+$('screen').onerror=()=>{$('screen').removeAttribute('src')};
 $('mirrorDetails').ontoggle=()=>{if($('mirrorDetails').open&&!document.hidden&&!$('app').classList.contains('hide'))refresh();else clearMirror()};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)clearMirror();else if($('mirrorDetails').open&&!$('app').classList.contains('hide'))refresh()});
-async function refresh(){if(refreshing)return;refreshing=true;try{const data=await api('/api/status');csrf=data.csrf;const panel=data.panel;state=panel?.state||'';$('pageState').textContent=panel?({'panel':'信息页','fans':'风扇页','console':'PVE 控制台','off':'黑屏'}[state]||state):'前屏离线';if(panel){$('brightness').value=panel.brightness;$('brightnessValue').textContent=panel.brightness+'%'}updateMirror(panel);const fan=data.fan;const modeLabel={'full':'全速','high':'标准','low':'静音'}[fan.mode]||'未知';$('fanStatus').textContent=fan.live?`当前 ${modeLabel} · 机箱 ${outputPercent(fan.pwm2??fan.pwm)}% / CPU ${outputPercent(fan.pwm3??fan.pwm)}%${fan.remaining?` · 剩余 ${fan.remaining} 秒`:''}`:'温控服务离线';for(const id of ['fanFull','fanHigh','fanLow','webFanFull','webFanHigh','webFanLow'])$(id).disabled=!fan.live;profiles=data.profiles||{high:data.curves,low:data.curves};if(!curves){curves=profiles[activeProfile]||data.curves;drawCurve('cpu',curves.cpu);drawCurve('drive',curves.drive)}if(data.curve_error){$('curveMessage').textContent='曲线配置读取异常：'+data.curve_error;$('curveMessage').className='status error'}verified=data.rgb_color_enabled;updateWebRgbButtons();$('rgbMode').disabled=!verified;$('rgbColor').disabled=!verified;$('rgbApply').disabled=!verified;$('rgbHint').textContent=verified?'常亮、呼吸、彩虹和颜色已在本机实测；调色后点击“应用灯效”。':'调色与新灯效需现场目视验证后开放；开关功能已验证。';if(Date.now()-rgbRefreshed>=15000){const r=await api('/api/rgb');rgb=r.rgb;rgbRefreshed=Date.now()}$('rgbStatus').textContent=`当前 ${['关闭','常亮','彩虹','呼吸'][rgb[0]]||'未知'} · RGB(${rgb.slice(1).join(', ')})`;if(!rgbDraftDirty)$('rgbColor').value='#'+rgb.slice(1).map(v=>v.toString(16).padStart(2,'0')).join('');}catch(e){if(e.message==='login required'){location.reload();return}message(e.message,true)}finally{refreshing=false}}
+async function refresh(){if(refreshing)return;refreshing=true;try{const data=await api('/api/status');csrf=data.csrf;const panel=data.panel;state=panel?.state||'';$('pageState').textContent=panel?({'panel':'信息页','fans':'风扇页','console':'PVE 控制台','off':'黑屏'}[state]||state):'前屏离线';if(panel){$('brightness').value=panel.brightness;$('brightnessValue').textContent=panel.brightness+'%'}updateMirror(panel);const fan=data.fan;const modeLabel={'full':'全速','high':'标准','low':'静音'}[fan.mode]||'未知';$('fanStatus').textContent=fan.live?`当前 ${modeLabel} · 机箱 ${outputPercent(fan.pwm2??fan.pwm)}% / CPU ${outputPercent(fan.pwm3??fan.pwm)}%${fan.remaining?` · 剩余 ${fan.remaining} 秒`:''}`:'温控服务离线';for(const id of ['fanFull','fanHigh','fanLow','webFanFull','webFanHigh','webFanLow'])$(id).disabled=!fan.live;profiles=data.profiles||{high:data.curves,low:data.curves};if(!curves){curves=profiles[activeProfile]||data.curves;drawCurve('cpu',curves.cpu);drawCurve('drive',curves.drive)}if(data.curve_error){$('curveMessage').textContent='曲线配置读取异常：'+data.curve_error;$('curveMessage').className='status error'}verified=data.rgb_color_enabled;updateWebRgbButtons();$('rgbMode').disabled=!verified;$('rgbColor').disabled=!verified;$('rgbApply').disabled=!verified;$('rgbHint').textContent=verified?'常亮、呼吸、彩虹和颜色已在本机实测；调色后点击“应用灯效”。':'调色与新灯效需现场目视验证后开放；开关功能已验证。';if(Date.now()-rgbRefreshed>=15000){const r=await api('/api/rgb');rgb=r.rgb;rgbRefreshed=Date.now()}$('rgbStatus').textContent=`当前 ${['关闭','常亮','彩虹','呼吸'][rgb[0]]||'未知'} · RGB(${rgb.slice(1).join(', ')})`;if(!rgbDraftDirty)$('rgbColor').value='#'+rgb.slice(1).map(v=>v.toString(16).padStart(2,'0')).join('');}catch(e){clearMirror();if(e.message==='login required'){location.reload();return}message(e.message,true)}finally{refreshing=false}}
 setInterval(()=>{if(!$('app').classList.contains('hide')&&!document.hidden)refresh()},1500);
 api('/api/status').then(data=>{csrf=data.csrf;$('public').classList.add('hide');$('login').classList.add('hide');$('app').classList.remove('hide');refreshWebViews();refresh()}).catch(()=>{});
 </script>

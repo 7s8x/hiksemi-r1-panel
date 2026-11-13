@@ -54,6 +54,7 @@ def project(view, values, theme):
     return result
 
 
+@lru_cache(maxsize=3)
 def document_layout(theme):
     pages = {view: layout(view, theme)[0] for view in ('panel', 'fans')}
     identity = hashlib.sha256(json.dumps(pages, sort_keys=True).encode()).hexdigest()[:20]

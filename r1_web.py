@@ -340,17 +340,33 @@ PUBLIC_PNG = PngCache(encode_public_png)
 PUBLIC_SVG = PngCache(lambda source: render_values(source[0], dict(source[2]), source[1]))
 
 
-def current_public_frame():
+def current_public_frame(*, check_groups=True):
     frames, _ = PUBLIC_COLLECTOR.latest() if PUBLIC_COLLECTOR else ({}, 0)
     if (not 0 <= time.time() - frames.get('updated', 0) <= 45
             or frames.get('freshness', {}).get('valid') is False):
         raise RuntimeError('public display unavailable')
     groups = frames.get('groups')
-    if groups is not None:
+    if check_groups and groups is not None:
         health = read_snapshot().get('freshness', {})
         if not health.get('valid') or health.get('groups', {}) != groups:
             raise RuntimeError('shared display unavailable')
     return frames
+
+
+PUBLIC_DOCUMENT_LOCK = threading.Lock()
+PUBLIC_DOCUMENT_CACHE = None
+
+
+def projected_pages(frames, spec):
+    """Keep only the latest projection; coalesce clients without caching health."""
+    global PUBLIC_DOCUMENT_CACHE
+    key = (spec['id'], frames['updated'])
+    with PUBLIC_DOCUMENT_LOCK:
+        if PUBLIC_DOCUMENT_CACHE is None or PUBLIC_DOCUMENT_CACHE[0] != key:
+            pages = {view: project(view, frames['values'][view], frames['theme'])
+                     for view in ('panel', 'fans')}
+            PUBLIC_DOCUMENT_CACHE = (key, pages)
+        return PUBLIC_DOCUMENT_CACHE[1]
 
 
 def public_document(include_layout=False):
@@ -360,10 +376,11 @@ def public_document(include_layout=False):
     if include_layout:
         return spec
     result = {'id': spec['id'], 'theme': theme,
-              'pages': {view: project(view, frames['values'][view], theme)
-                        for view in ('panel', 'fans')},
+              'pages': projected_pages(frames, spec),
               'valid_for': max(0, min(30, 45 - (time.time() - frames['updated'])))}
-    if current_public_frame().get('updated') != frames['updated']:
+    # Recheck the in-memory worker after projection, without reading the file twice.
+    # Every request, including cache hits, has already checked current group health.
+    if current_public_frame(check_groups=False).get('updated') != frames['updated']:
         raise RuntimeError('public display changed')
     return result
 
