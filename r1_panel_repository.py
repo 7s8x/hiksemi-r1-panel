@@ -233,11 +233,39 @@ def framebuffer_info(fd):
     return line_length
 
 
+def _input_capability_bits(path):
+    """Decode Linux sysfs bitmaps: high native unsigned-long word first."""
+    words = read_text(path).split()
+    if not words:
+        raise ValueError("missing input capabilities")
+    word_bits = struct.calcsize("L") * 8
+    values = [int(word, 16) for word in reversed(words)]
+    if any(value < 0 or value >= 1 << word_bits for value in values):
+        raise ValueError("invalid input capability word")
+    return sum(value << (index * word_bits) for index, value in enumerate(values))
+
+
 def touchscreen_path():
+    candidates = []
     for path in glob.glob("/sys/class/input/event*"):
-        if read_text(path + "/device/name") == "CST0836:00 0911:5288":
-            return "/dev/input/" + Path(path).name
-    raise RuntimeError("R1 touchscreen was not found")
+        device = Path(path) / "device"
+        if read_text(device / "name") != "CST0836:00 0911:5288":
+            continue
+        try:
+            events = _input_capability_bits(device / "capabilities/ev")
+            keys = _input_capability_bits(device / "capabilities/key")
+            axes = _input_capability_bits(device / "capabilities/abs")
+        except ValueError:
+            continue  # Missing/disappearing or malformed devices are not safe candidates.
+        absolute_xy = axes & 3 == 3
+        multitouch_xy = axes & (3 << 0x35) == 3 << 0x35
+        if events & 0x0a == 0x0a and keys & (1 << 0x14a) and (absolute_xy or multitouch_xy):
+            candidates.append("/dev/input/" + Path(path).name)
+    if not candidates:
+        raise RuntimeError("R1 touchscreen was not found (absolute touch capabilities required)")
+    if len(candidates) != 1:
+        raise RuntimeError("R1 touchscreen is ambiguous: " + ", ".join(sorted(candidates)))
+    return candidates[0]
 
 
 class TouchGesture:

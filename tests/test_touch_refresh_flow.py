@@ -100,13 +100,59 @@ class TouchRefreshFlowTests(unittest.TestCase):
         reader.stop.assert_called_once()
 
 
-    def test_touchscreen_discovery_uses_device_name_not_event_number(self):
-        with patch.object(panel.glob, 'glob', return_value=['/sys/class/input/event2', '/sys/class/input/event9']), \
-             patch.object(panel, 'read_text', side_effect=['other input', 'CST0836:00 0911:5288']):
-            self.assertEqual(panel.touchscreen_path(), '/dev/input/event9')
+    def discover(self, devices):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as folder:
+            paths = []
+            for event, name, ev, key, axes in devices:
+                device = Path(folder) / event / 'device'
+                (device / 'capabilities').mkdir(parents=True)
+                (device / 'name').write_text(name)
+                for field, value in [('ev', ev), ('key', key), ('abs', axes)]:
+                    if value is not None:
+                        (device / 'capabilities' / field).write_text(value)
+                paths.append(str(device.parent))
+            with patch.object(panel.glob, 'glob', return_value=paths):
+                return panel.touchscreen_path()
+
+    def touch(self, event='event9', axes='3', key=None):
+        # BTN_TOUCH is bit 330, not a low-word mouse button.
+        bits = panel.struct.calcsize('L') * 8
+        words = ['0'] * (330 // bits + 1)
+        words[0] = format(1 << (330 % bits), 'x')
+        return (event, 'CST0836:00 0911:5288', 'b', key or ' '.join(words), axes)
+
+    def test_touchscreen_skips_same_name_mouse_in_either_order(self):
+        mouse = ('event3', 'CST0836:00 0911:5288', '17', '30000 0 0 0 0', '0')
+        for devices in ([mouse, self.touch('event4')], [self.touch('event4'), mouse]):
+            self.assertEqual(self.discover(devices), '/dev/input/event4')
+
+    def test_touchscreen_discovery_uses_capabilities_not_event_number(self):
+        other = ('event2', 'other input', 'b', '0', '3')
+        self.assertEqual(self.discover([other, self.touch()]), '/dev/input/event9')
+
+    def test_touchscreen_accepts_multitouch_position_pair(self):
+        self.assertEqual(self.discover([self.touch(axes=format(3 << 0x35, 'x'))]), '/dev/input/event9')
 
     def test_touchscreen_discovery_rejects_missing_matching_device(self):
-        with patch.object(panel.glob, 'glob', return_value=['/sys/class/input/event2']), \
-             patch.object(panel, 'read_text', return_value='other input'):
-            with self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
-                panel.touchscreen_path()
+        with self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
+            self.discover([])
+
+    def test_touchscreen_rejects_missing_or_malformed_capabilities(self):
+        for axes in (None, '', 'not-hex', '-1', '1' + '0' * (panel.struct.calcsize('L') * 2)):
+            with self.subTest(axes=axes), self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
+                self.discover([self.touch(axes=axes)])
+
+    def test_touchscreen_rejects_multiple_capable_devices(self):
+        with self.assertRaisesRegex(RuntimeError, 'touchscreen is ambiguous'):
+            self.discover([self.touch('event4'), self.touch('event9')])
+
+    def test_touchscreen_rejects_absolute_device_without_touch_button(self):
+        with self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
+            self.discover([self.touch(key='1')])
+
+    def test_touchscreen_rejects_incomplete_position_pair(self):
+        for axes in ('1', format(1 << 0x35, 'x')):
+            with self.subTest(axes=axes), self.assertRaisesRegex(RuntimeError, 'touchscreen was not found'):
+                self.discover([self.touch(axes=axes)])

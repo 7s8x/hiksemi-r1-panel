@@ -30,7 +30,7 @@
 | --- | --- |
 | 机型 | 海康 R1，`/sys/class/dmi/id/board_name` 必须为 `HS-AFS-R1` |
 | 屏幕 | 376×960 DSI，`/dev/fb0` |
-| 触摸 | `CST0836:00 0911:5288` |
+| 触摸 | `CST0836:00 0911:5288`，按绝对坐标与触摸按键能力筛选，不固定 event 编号 |
 | 传感器 | IT8613E（需要单独构建的 `it87` 内核模块） |
 | 系统 | Proxmox VE，systemd，Python 3.12+ |
 | 依赖 | 无第三方 Python 包，全部标准库；Linux 系统需 Cairo（`libcairo2`）、Fontconfig（`libfontconfig1`）、项目附带 OFL 字体、PVE 的 `pvesh`/`pvesm`/`qm`；仅 `init --tls` 需要 `openssl` |
@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 217 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
+- 当前源码的 223 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
 
 ### 尚未验证
 
