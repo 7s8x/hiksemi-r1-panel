@@ -26,7 +26,7 @@ class SiteConfigTests(unittest.TestCase):
                 self.assertEqual(states, ("present",) * count + ("empty",) * (4 - count))
 
     def test_bad_config_is_not_silently_replaced_with_defaults(self):
-        cases = [{"vmids": [True]}, {"vmids": [100, 100]}, {"vmids": [100, 101, 102]},
+        cases = [{"vmids": [True]}, {"vmids": [100, 100]}, {"vmids": [100, 101, 102, 103]},
                  {"node": "../../other"}, {"stores": ["local", "local"]},
                  {"occupied_bays": [0]}, {"occupied_bays": [1, 1]},
                  {"controller": "bad"}, {"unknown": "ignored?"},
@@ -40,6 +40,18 @@ class SiteConfigTests(unittest.TestCase):
                     file.write_text(json.dumps(record))
                     with self.assertRaises(ValueError):
                         load_site(file)
+
+    def test_three_vm_configuration_and_single_batch_query(self):
+        import r1_vm_status as vms
+        from types import SimpleNamespace
+        with TemporaryDirectory() as directory:
+            file=Path(directory)/'site.json'
+            file.write_text(json.dumps({'vmids':[100,111,200]}))
+            self.assertEqual(load_site(file).vmids,(100,111,200))
+        records=[{'vmid':100,'status':'running'},{'vmid':111,'status':'stopped'},{'vmid':200,'status':'running'}]
+        with patch.object(vms.subprocess,'run',return_value=SimpleNamespace(stdout=json.dumps(records))) as query:
+            self.assertEqual(vms.vm_statuses((100,111,200)),{100:'RUNNING',111:'STOPPED',200:'RUNNING'})
+            query.assert_called_once()
 
     def test_missing_unexpected_and_zero_disk_policy(self):
         config = replace(SiteConfig(), occupied_bays=(1,))

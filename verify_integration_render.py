@@ -61,6 +61,23 @@ for theme in ('mocha', 'latte'):
             if output is not None:
                 (output / (key.replace('/', '-') + '.png')).write_bytes(png)
                 (output / (key.replace('/', '-') + '.svg')).write_bytes(svg)
+            if view == 'panel':
+                root = ET.fromstring(svg)
+                # The system card deliberately loses VM rows and recentres temperature/memory.
+                # Header and all storage rows remain under the fixed historical baseline.
+                for group in root.iter():
+                    for node in list(group):
+                        position = node.get('y', node.get('cy', node.get('y1', '0')))
+                        if 99 <= float(position) < 296:
+                            group.remove(node)
+                svg = ET.tostring(root, encoding='utf-8')
+                masked = Painter()
+                try:
+                    paint_svg(masked, svg)
+                    pixels, stride = masked.pixels()
+                    png = rgb_png(pixels, stride)
+                finally:
+                    masked.close()
             if view == 'fans':
                 root = ET.fromstring(svg)
                 for group in root.iter():

@@ -116,16 +116,22 @@ def information_values(data: dict) -> dict:
             f"D{index}_USED": used_text,
             f"D{index}_TOTAL": total_text,
         })
+
+    return values
+
+
+
+def vm_values(data):
+    values = {}
     vms = list(data.get("vms") or [])
-    running = sum(status == "RUNNING" for _, status in vms[:2])
-    values["VM_SUMMARY"] = f"{running} / {min(len(vms), 2)} 运行中"
-    for index in range(2):
-        vmid, status = vms[index] if index < len(vms) else (f"VM {index + 1}", "UNKNOWN")
+    running = sum(status == "RUNNING" for _, status in vms[:3])
+    values["VM_SUMMARY"] = f"{running} / {min(len(vms), 3)} 运行中"
+    for index in range(3):
+        vmid, status = vms[index] if index < len(vms) else (f"VM {SITE.vmids[index]}" if index < len(SITE.vmids) else "VM --", "UNKNOWN")
         values[f"VM{index}_NAME"] = str(vmid)[:16]
         values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
         values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
     return values
-
 
 def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:
     """Compatibility renderer, also used by the physical panel."""
@@ -162,6 +168,7 @@ def valid_rgb_state(state):
 def fan_values(data: dict) -> dict:
     """Format display fields without building an image or reading hardware."""
     values = _shared(data)
+    values.update(vm_values(data))
     fans = data.get("fans") or {}
     control = data.get("control") or {}
     controller_state = _controller_state(control)
@@ -218,7 +225,12 @@ def fan_values(data: dict) -> dict:
     idle_bg, idle_fg = "#244354", "#edf6f8"
     detail = ('结束后返回' + {'high': '标准模式', 'low': '静音模式', 'auto': '标准模式'}.get(control.get('return_to'), '原有模式')
               if full_active else '')
-    values.update(CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
+    compact_status = status_text
+    if full_active:
+        back = {'high':'标准', 'low':'静音', 'auto':'标准'}.get(control.get('return_to'), '原档位')
+        seconds = control.get('remaining')
+        compact_status = f'全速 · {seconds}秒后返回{back}' if seconds is not None else f'全速 · 结束后返回{back}'
+    values.update(CONTROL_CARD_STATUS=compact_status, CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG="#6bbfe5" if full_active else idle_bg,
                   FULL_BUTTON_FG=active_fg if full_active else idle_fg,

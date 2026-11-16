@@ -112,9 +112,9 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("1TB · 940GB 可用", panel)
         data["storage"].append((("2TB", "SSD", "****"), 39))
         self.assertIn("BAY 1 · 2TB SSD", render_information(data).decode("utf-8"))
-        self.assertIn("VM 100", panel)
-        self.assertIn("VM 100", web_panel)
-        self.assertIn("运行中", web_panel)
+        self.assertNotIn("VM 100", panel)
+        self.assertIn("VM 100", fans)
+        self.assertIn("运行中", fans)
         self.assertNotIn("虚拟机状态", web_panel)
         self.assertIn('height="197"', web_panel)
         self.assertIn('height="633"', web_panel)
@@ -122,8 +122,8 @@ class WebTests(unittest.TestCase):
         self.assertIn('>存储</text>', web_panel)
         self.assertNotIn('>存储硬盘', web_panel)
         self.assertIn('cx="94" cy="209" r="58"', web_panel)
-        self.assertIn('x="329" y="251"', web_panel)
-        self.assertIn('x="329" y="269"', web_panel)
+        self.assertIn('x="329" y="250"', web_panel)
+        self.assertNotIn('x="329" y="269"', web_panel)
         self.assertIn('font-size="39" font-weight="700" dominant-baseline="middle" text-anchor="end">56', web_panel)
         self.assertNotIn("Synology", panel)
         self.assertIn("995", fans)
@@ -136,8 +136,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("常亮", fans)
         self.assertIn("灯光已关闭", fans)
         self.assertNotIn("温控依据", fans)
-        self.assertIn("硬盘最高温度", fans)
-        self.assertLess(fans.index("风扇控制"), fans.index("硬盘最高温度"))
+        self.assertIn("硬盘最高 ", fans)
+        self.assertLess(fans.index("风扇控制"), fans.index("硬盘最高 "))
         self.assertLess(fans.index("风扇控制"), fans.index("灯光控制"))
         self.assertIn("65°C", fans)
         self.assertIn("39°C", fans)
@@ -156,7 +156,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("独立温控服务", web_fans)
         self.assertNotIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("全速散热 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("全速 · 45秒后返回原档位", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -494,8 +494,8 @@ class LogTests(unittest.TestCase):
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
         cases = [({'live': False}, '温控服务离线'),
                  ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速散热 · 剩余 0 秒'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速散热'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速 · 0秒后返回原档位'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速 · 结束后返回原档位'),
                  ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准模式'),
                  ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音模式'),
                  ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准模式'),

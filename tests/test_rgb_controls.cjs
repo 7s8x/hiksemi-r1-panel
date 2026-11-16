@@ -24,11 +24,11 @@ function fixture({csrf='token',verified=true,read=async()=>({rgb:[2,17,83,219]})
  f=fixture({read:async()=>{throw Error('offline')}});await f.buttons.webRgbOff.onclick();assert.equal(f.writes.length,0);assert.equal(f.buttons.webRgbOff.disabled,false);
  // CSS percentage overlays must match SVG/physical hitboxes on every viewport width.
  function css(name,property){return Number(source.match(new RegExp('\\.web-fan-hit\\.'+name+'\\{([^}]+)\\}'))[1].match(new RegExp(property+':([0-9.]+)%'))[1])}
- assert.ok(Math.abs(css('fan','top')*960/100-657)<.001);
+ assert.ok(Math.abs(css('fan','top')*960/100-750)<.001);
  for(const [name,x] of [['fan1',32],['fan2',138],['fan3',244],['rgb1',32],['rgb2',138],['rgb3',244]]){
   assert.ok(Math.abs(css(name,'left')*376/100-x)<.001,name);
   assert.ok(Math.abs(css(name,'width')*376/100-100)<.001,name);
  }
- assert.ok(Math.abs(css('rgb','top')*960/100-882)<.001);
+ assert.ok(Math.abs(css('rgb','top')*960/100-895)<.001);
  console.log('rgb_quick_controls=passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

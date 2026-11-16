@@ -123,7 +123,7 @@ class WebDomTests(unittest.TestCase):
         root = applied('panel', information_values(data), 'mocha')
         self.assertEqual(canonical(root), canonical(ET.fromstring(render_information(data, theme='mocha'))))
         self.assertFalse(any(n.tag.endswith('script') for n in root.iter()))
-        memory = next(n for n in root.iter() if n.get('x') == '329' and n.get('y') == '224')
+        memory = next(n for n in root.iter() if n.get('x') == '329' and n.get('y') == '250')
         self.assertEqual(len(memory), 2)
         self.assertEqual(memory.text, '--')
 

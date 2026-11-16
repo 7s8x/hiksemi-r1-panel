@@ -30,7 +30,7 @@ def demo_data():
         "storage_capacity": [(60*10**9, 940*10**9, 6), (80*10**9, 1920*10**9, 4),
                              (770*10**9, 230*10**9, 77), (3480*10**9, 520*10**9, 87),
                              (1600*10**9, 2400*10**9, 40)],
-        "vms": [("VM 100", "RUNNING"), ("VM 111", "RUNNING")],
+        "vms": [("VM 100", "RUNNING"), ("VM 111", "RUNNING"), ("VM 200", "RUNNING")],
         "fans": {"fan2_input": 1464, "fan3_input": 3994, "pwm2": 184, "pwm3": 184},
         "control": {"live": True, "mode": "high", "desired": "high"},
         "fan_basis": (65, 39, 4), "rgb": False,

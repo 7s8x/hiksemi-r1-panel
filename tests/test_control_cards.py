@@ -11,6 +11,21 @@ from ui_preview import demo_data
 NS={'s':'http://www.w3.org/2000/svg'}
 
 class ControlCardTests(unittest.TestCase):
+    def test_vm_card_moves_all_three_ids_and_preserves_missing_state(self):
+        from r1_web_views import render_information
+        data=demo_data()
+        data['vms']=[('VM 100','RUNNING'),('VM 111','STOPPED'),('VM 200','UNKNOWN')]
+        info=render_information(data).decode()
+        fans=render_fans(data).decode()
+        for vm in ('VM 100','VM 111','VM 200'):
+            self.assertNotIn(vm,info)
+            self.assertIn(vm,fans)
+        self.assertIn('1 / 3 运行中',fans)
+        self.assertIn('已停止',fans)
+        self.assertIn('状态未知',fans)
+        data['vms']=[]
+        self.assertNotIn('>运行中<',render_fans(data).decode())
+
     def data(self, mode='high', rgb=(3, 0, 130, 255)):
         data=demo_data()
         data['control']={'live':True,'mode':mode,'desired':mode,'remaining':29 if mode=='full' else None,'return_to':'low'}
@@ -20,27 +35,27 @@ class ControlCardTests(unittest.TestCase):
     def test_three_equal_height_cards_and_remaining_rgb_space(self):
         root=ET.fromstring(render_fans(self.data()))
         cards=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='16' and n.get('width')=='344']
-        self.assertEqual([(n.get('y'),n.get('height')) for n in cards],[('99','197'),('310','197'),('521','197'),('732','211')])
+        self.assertEqual([(n.get('y'),n.get('height')) for n in cards],[('99','197'),('310','197'),('521','132'),('666','132'),('811','132')])
         label=next(n for n in root.findall('.//s:text',NS) if n.text=='机身 RGB')
-        self.assertEqual((label.get('x'),label.get('y'),label.get('font-size'),label.get('text-anchor')),('344','758','12','end'))
+        self.assertEqual((label.get('x'),label.get('y'),label.get('font-size'),label.get('text-anchor')),('344','836','12','end'))
         text=''.join(root.itertext())
         for removed in ('温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
             self.assertNotIn(removed,text)
-        for kept in ('机身 RGB','双路温控','CPU 最高温度','硬盘最高温度','全速','标准','静音','呼吸','常亮','关闭'):
+        for kept in ('机身 RGB','双路温控','CPU 最高 ','硬盘最高 ','全速','标准','静音','呼吸','常亮','关闭'):
             self.assertIn(kept,text)
 
     def test_both_button_rows_match_physical_hit_regions_and_gaps(self):
         root=ET.fromstring(render_fans(self.data()))
-        for y,hit,expected in [(657,panel.fan_button_mode,('full','high','low')),(882,panel.rgb_button_action,('breathe','steady','off'))]:
+        for y,hit,expected in [(750,panel.fan_button_mode,('full','high','low')),(895,panel.rgb_button_action,('breathe','steady','off'))]:
             buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')==str(y)]
-            self.assertEqual([(n.get('x'),n.get('width'),n.get('height')) for n in buttons],[('32','100','45'),('138','100','45'),('244','100','45')])
+            self.assertEqual([(n.get('x'),n.get('width'),n.get('height')) for n in buttons],[('32','100','35'),('138','100','35'),('244','100','35')])
             for x,value in zip((32,138,244),expected):
                 self.assertEqual(hit((x,y)),value)
-                self.assertEqual(hit((x+100,y+45)),value)
+                self.assertEqual(hit((x+100,y+35)),value)
                 self.assertIsNone(hit((x,y-1)))
-                self.assertIsNone(hit((x,y+46)))
+                self.assertIsNone(hit((x,y+36)))
             for x in (31,133,137,239,243,345):self.assertIsNone(hit((x,y)))
-        self.assertIsNone(panel.fan_button_mode((80,760)))
+        self.assertIsNone(panel.fan_button_mode((80,720)))
 
     def test_color_is_literal_device_data_for_both_themes(self):
         for theme in ('current','mocha','latte'):
@@ -50,7 +65,7 @@ class ControlCardTests(unittest.TestCase):
                     validate_svg(svg)
                     self.assertIn(label.encode(),svg)
                     root=ET.fromstring(svg)
-                    dot=next(n for n in root.findall('.//s:circle',NS) if n.get('cy')=='801')
+                    dot=next(n for n in root.findall('.//s:circle',NS) if n.get('cy')=='865')
                     self.assertEqual(dot.get('fill-opacity'),'1' if mode in (1,3) else '0')
                     if mode in (1,3):self.assertEqual(dot.get('fill'),'#1153db')
 
@@ -59,14 +74,14 @@ class ControlCardTests(unittest.TestCase):
         svg=render_fans(data,theme='mocha')
         self.assertIn('灯光状态不可用'.encode(),svg)
         root=ET.fromstring(svg)
-        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='882']
+        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='895']
         self.assertEqual(len({n.get('fill') for n in buttons}),1)
 
     def test_fan_countdown_return_target_and_missing_temperature(self):
         data=self.data('full');data['fan_basis']=(None,None,0)
         svg=render_fans(data)
-        self.assertIn('全速散热 · 剩余 29 秒'.encode(),svg)
-        self.assertIn('结束后返回静音模式'.encode(),svg)
+        self.assertIn('全速 · 29秒后返回静音'.encode(),svg)
+        self.assertIn('29秒后返回静音'.encode(),svg)
         self.assertNotIn(b'None',svg)
         self.assertIn(b'--',svg)
         data['control']={'live':False}
