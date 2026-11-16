@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 214 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
+- 当前源码的 215 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
 
 ### 尚未验证
 
@@ -279,3 +279,5 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 登录后的实体屏实时镜像默认折叠，展开后每5秒获取PNG，展开/切页/亮度变化立即刷新；收起或页面转入后台时停止取图，切页和亮度控制仍可直接使用。上方 Web 双页使用内联 SVG，固定布局仅挂载一次，每 15 秒以 JSON 局部更新数字、环弧、容量条和状态；失效或请求失败时隐藏旧画面。
 
 显示档位统一为「标准／静音／全速」，分别对应兼容 API/IPC 值 `high`／`low`／`full`；现有曲线配置名称不变。共享控制卡片的本轮实体触控验收仍待现场确认，详见 [Web说明](docs/web.md#本轮实体触控验收待现场确认)。
+
+风扇与灯光控制卡移除中部重复状态文案，状态统一由角标显示；两组三按钮均加高至52px，全速按钮内保留倒计时及返回档位提示。

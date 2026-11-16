@@ -11,6 +11,17 @@ from ui_preview import demo_data
 NS={'s':'http://www.w3.org/2000/svg'}
 
 class ControlCardTests(unittest.TestCase):
+    def test_duplicate_body_status_removed_and_buttons_taller(self):
+        svg=render_fans(self.data(mode='low',rgb=(0,0,0,0))).decode()
+        self.assertNotIn('静音模式',svg)
+        self.assertNotIn('灯光已关闭',svg)
+        self.assertIn('>静音</text>',svg)
+        self.assertIn('>关闭</text>',svg)
+        root=ET.fromstring(svg)
+        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('width')=='100']
+        self.assertEqual(len(buttons),6)
+        self.assertEqual({n.get('height') for n in buttons},{'52'})
+
     def test_header_badges_share_style_and_report_real_states(self):
         from r1_web_views import fan_values
         data=self.data(mode='low',rgb=(0,0,0,0))
@@ -66,46 +77,47 @@ class ControlCardTests(unittest.TestCase):
 
     def test_both_button_rows_match_physical_hit_regions_and_gaps(self):
         root=ET.fromstring(render_fans(self.data()))
-        for y,hit,expected in [(605,panel.fan_button_mode,('full','high','low')),(750,panel.rgb_button_action,('breathe','steady','off'))]:
+        for y,hit,expected in [(588,panel.fan_button_mode,('full','high','low')),(733,panel.rgb_button_action,('breathe','steady','off'))]:
             buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')==str(y)]
-            self.assertEqual([(n.get('x'),n.get('width'),n.get('height')) for n in buttons],[('32','100','35'),('138','100','35'),('244','100','35')])
+            self.assertEqual([(n.get('x'),n.get('width'),n.get('height')) for n in buttons],[('32','100','52'),('138','100','52'),('244','100','52')])
             for x,value in zip((32,138,244),expected):
                 self.assertEqual(hit((x,y)),value)
-                self.assertEqual(hit((x+100,y+35)),value)
+                self.assertEqual(hit((x+100,y+52)),value)
                 self.assertIsNone(hit((x,y-1)))
-                self.assertIsNone(hit((x,y+36)))
+                self.assertIsNone(hit((x,y+53)))
             for x in (31,133,137,239,243,345):self.assertIsNone(hit((x,y)))
         self.assertIsNone(panel.fan_button_mode((80,720)))
 
     def test_color_is_literal_device_data_for_both_themes(self):
         for theme in ('current','mocha','latte'):
-            for mode,label in ((0,'灯光已关闭'),(1,'常亮'),(2,'彩虹'),(3,'呼吸')):
+            for mode,label in ((0,'关闭'),(1,'常亮'),(2,'彩虹'),(3,'呼吸')):
                 with self.subTest(theme=theme,mode=mode):
                     svg=render_fans(self.data(rgb=(mode,17,83,219)),theme=theme)
                     validate_svg(svg)
                     self.assertIn(label.encode(),svg)
                     root=ET.fromstring(svg)
-                    dot=next(n for n in root.findall('.//s:circle',NS) if n.get('cy')=='720')
-                    self.assertEqual(dot.get('fill-opacity'),'1' if mode in (1,3) else '0')
+                    dot=next(n for n in root.findall('.//s:circle',NS) if n.get('cy')=='690.5')
                     if mode in (1,3):self.assertEqual(dot.get('fill'),'#1153db')
+                    self.assertFalse(any(n.get('cy')=='720' for n in root.findall('.//s:circle',NS)))
+
 
     def test_unknown_rgb_has_no_fake_color_or_selected_effect(self):
         data=self.data();data.update(rgb=None,rgb_state=[3,'bad',0,0])
         svg=render_fans(data,theme='mocha')
-        self.assertIn('灯光状态不可用'.encode(),svg)
+        self.assertIn('>未知</text>'.encode(),svg)
         root=ET.fromstring(svg)
-        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='750']
+        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='733']
         self.assertEqual(len({n.get('fill') for n in buttons}),1)
 
     def test_fan_countdown_return_target_and_missing_temperature(self):
         data=self.data('full');data['fan_basis']=(None,None,0)
         svg=render_fans(data)
-        self.assertIn('全速 · 29秒后返回静音'.encode(),svg)
+        self.assertIn('29秒后返回静音'.encode(),svg)
         self.assertIn('29秒后返回静音'.encode(),svg)
         self.assertNotIn(b'None',svg)
         self.assertIn(b'--',svg)
         data['control']={'live':False}
-        self.assertIn('温控服务离线'.encode(),render_fans(data))
+        self.assertIn('>离线</text>'.encode(),render_fans(data))
 
     def test_rgb_projection_validates_all_bytes(self):
         for invalid in (None,[],[3,0,0],[4,1,2,3],[True,1,2,3],[3,-1,0,0],[3,0,0,256],[3,'red',0,0]):

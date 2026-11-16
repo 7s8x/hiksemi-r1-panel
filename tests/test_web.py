@@ -131,10 +131,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
         for label in ("全速", "标准", "静音"):
             self.assertIn(label, fans)
-        self.assertIn("标准模式", fans)
+        self.assertIn("标准", fans)
         self.assertIn("呼吸", fans)
         self.assertIn("常亮", fans)
-        self.assertIn("灯光已关闭", fans)
+        self.assertIn("关闭", fans)
         self.assertNotIn("温控依据", fans)
         self.assertIn("硬盘最高 ", fans)
         self.assertLess(fans.index("风扇控制"), fans.index("硬盘最高 "))
@@ -156,7 +156,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("独立温控服务", web_fans)
         self.assertNotIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("全速 · 45秒后返回原档位", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("45秒后返回原档位", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -492,16 +492,16 @@ class LogTests(unittest.TestCase):
             self.assertFalse(log_path.exists())
 
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
-        cases = [({'live': False}, '温控服务离线'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速 · 0秒后返回原档位'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速 · 结束后返回原档位'),
-                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准模式'),
-                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音模式'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准模式'),
-                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '曲线状态未知'),
-                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '曲线状态未知'),
-                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '曲线状态未知')]
+        cases = [({'live': False}, '离线'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'full'}, '切换中'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '0秒后返回原档位'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '结束后返回原档位'),
+                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准'),
+                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准'),
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '未知'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '未知'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '未知')]
         for control, expected in cases:
             with self.subTest(control=control):
                 self.assertIn(expected.encode(), render_fans({'control': control}))

@@ -53,18 +53,18 @@ class FanProfileTests(unittest.TestCase):
         for back, label in (("low", "静音"), ("high", "标准")):
             svg = render_fans({"control": {"live": True, "mode": "full", "desired": "full", "remaining": 29, "return_to": back}})
             self.assertIn(("29秒后返回" + label).encode(), svg)
-            self.assertIn("全速 · 29秒后返回".encode(), svg)
+            self.assertIn("29秒后返回".encode(), svg)
             self.assertIn("呼吸".encode(), svg)
             self.assertIn("常亮".encode(), svg)
-            self.assertIn(b'x="32" y="750" width="100" height="35"', svg)
-            self.assertIn(b'x="138" y="750" width="100" height="35"', svg)
+            self.assertIn(b'x="32" y="733" width="100" height="52"', svg)
+            self.assertIn(b'x="138" y="733" width="100" height="52"', svg)
 
     def test_three_buttons_map_to_expected_modes_and_render(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             mode_file, status_file = root / "mode", root / "status.json"
-            expected = {80: ("full", "全速 ·"), 188: ("high", "标准模式"),
-                        294: ("low", "静音模式")}
+            expected = {80: ("full", "全速"), 188: ("high", "标准"),
+                        294: ("low", "静音")}
             for x, (mode, label) in expected.items():
                 with self.subTest(mode=mode):
                     self.assertEqual(fan_button_mode((x, 622)), mode)

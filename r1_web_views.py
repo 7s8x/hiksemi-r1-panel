@@ -233,8 +233,11 @@ def fan_values(data: dict) -> dict:
         back = {'high':'标准', 'low':'静音', 'auto':'标准'}.get(control.get('return_to'), '原档位')
         seconds = control.get('remaining')
         compact_status = f'全速 · {seconds}秒后返回{back}' if seconds is not None else f'全速 · 结束后返回{back}'
+    button_detail = ''
+    if full_active:
+        button_detail = f'{seconds}秒后返回{back}' if seconds is not None else f'结束后返回{back}'
     fan_badge = {'high':'标准', 'low':'静音', 'full':'全速', 'offline':'离线', 'switching':'切换中'}.get(controller_state, '未知')
-    values.update(FAN_BADGE_TEXT=fan_badge,
+    values.update(FULL_BUTTON_DETAIL=button_detail, FULL_BUTTON_TEXT_Y=614 if full_active else 620, FAN_BADGE_TEXT=fan_badge,
                   FAN_BADGE_COLOR="#9ee8ce" if controller_state in ('high','low') else "#f4b46f",
                   CONTROL_CARD_STATUS=compact_status, CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
@@ -267,6 +270,7 @@ def fan_values(data: dict) -> dict:
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
+    values["RGB_INDICATOR"] = swatch if mode in (1,3) else values["RGB_BADGE_COLOR"]
     values["RGB_SWATCH"] = swatch
     return values
 
@@ -281,5 +285,7 @@ def render_values(view, values, theme):
     swatch = values.get("RGB_SWATCH", "#9bb1be")
     if view == "fans":
         values["RGB_SWATCH"] = "RGB_SWATCH_COLOR"
+        if values["RGB_SWATCH_OPACITY"] == 1:
+            values["RGB_INDICATOR"] = "RGB_SWATCH_COLOR"
     template = "r1_web_information_web.svg" if view == "panel" else "r1_web_fans_web.svg"
     return theme_svg(_template(template, values), theme).replace(b"RGB_SWATCH_COLOR", swatch.encode("ascii"))

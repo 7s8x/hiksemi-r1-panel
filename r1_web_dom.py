@@ -48,7 +48,8 @@ def project(view, values, theme):
     result = []
     for _, attr, pattern, tag, attributes in slots:
         value = TOKEN.sub(lambda m: str(values[m[1]]), pattern)
-        if attr in ('fill', 'stroke') and pattern != '{{RGB_SWATCH}}':
+        if (attr in ('fill', 'stroke') and pattern != '{{RGB_SWATCH}}'
+                and not (pattern == '{{RGB_INDICATOR}}' and values.get('RGB_SWATCH_OPACITY') == 1)):
             value = _color(theme, tag, attributes, attr, value)
         result.append(value)
     return result
