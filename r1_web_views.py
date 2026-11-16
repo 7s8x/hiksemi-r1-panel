@@ -231,14 +231,20 @@ def fan_values(data: dict) -> dict:
     compact_status = status_text
     if full_active:
         back = {'high':'标准', 'low':'静音', 'auto':'标准'}.get(control.get('return_to'), '原档位')
-        seconds = control.get('remaining')
+        seconds = _number(control.get('remaining'), 0, 60)
         compact_status = f'全速 · {seconds}秒后返回{back}' if seconds is not None else f'全速 · 结束后返回{back}'
     button_detail = ''
     if full_active:
-        button_detail = f'{seconds}秒后返回{back}' if seconds is not None else f'结束后返回{back}'
+        button_detail = f'结束后返回{back}'
     fan_badge = {'high':'标准', 'low':'静音', 'full':'全速', 'offline':'离线', 'switching':'切换中'}.get(controller_state, '未知')
-    values.update(FULL_BUTTON_DETAIL=button_detail, FULL_BUTTON_TEXT_Y=614 if full_active else 620, FAN_BADGE_TEXT=fan_badge,
-                  FAN_BADGE_COLOR="#9ee8ce" if controller_state in ('high','low') else "#f4b46f",
+    if full_active and seconds is not None:
+        fan_badge = f'全速 · {int(seconds)}s'
+    badge_width = 104 if full_active and seconds is not None else 65
+    badge_x = 344 - badge_width
+    values.update(FAN_BADGE_WIDTH=badge_width, FAN_BADGE_X=badge_x,
+                  FAN_BADGE_DOT_X=badge_x+13, FAN_BADGE_TEXT_X=badge_x+26,
+                  FULL_BUTTON_DETAIL=button_detail, FULL_BUTTON_TEXT_Y=614 if full_active else 620, FAN_BADGE_TEXT=fan_badge,
+                  FAN_BADGE_COLOR="#9ee8ce" if controller_state in ('high','low','full') else "#f4b46f",
                   CONTROL_CARD_STATUS=compact_status, CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG="#6bbfe5" if full_active else idle_bg,

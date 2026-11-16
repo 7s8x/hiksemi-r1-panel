@@ -52,8 +52,8 @@ class FanProfileTests(unittest.TestCase):
     def test_control_card_return_target_and_original_light_buttons(self):
         for back, label in (("low", "静音"), ("high", "标准")):
             svg = render_fans({"control": {"live": True, "mode": "full", "desired": "full", "remaining": 29, "return_to": back}})
-            self.assertIn(("29秒后返回" + label).encode(), svg)
-            self.assertIn("29秒后返回".encode(), svg)
+            self.assertIn(("结束后返回" + label).encode(), svg)
+            self.assertIn("全速 · 29s".encode(), svg)
             self.assertIn("呼吸".encode(), svg)
             self.assertIn("常亮".encode(), svg)
             self.assertIn(b'x="32" y="733" width="100" height="52"', svg)

@@ -85,8 +85,10 @@ for theme in ('mocha', 'latte'):
                         position = node.get('y', node.get('cy', node.get('y1', '0')))
                         if float(position) >= 521:
                             group.remove(node)
-                # Approved mode-label rename only; geometry and fault labels still compare.
+                # Approved mode-label rename and separator trim to the label's x=171.
                 for node in root.iter():
+                    if node.tag.rsplit('}',1)[-1] == 'line' and node.get('y1') in ('227','438'):
+                        node.set('x1','171')
                     if node.get('x') == '329' and node.get('y') in ('257', '468'):
                         node.text = {'高速': '标准', '低速': '静音'}.get(node.text, node.text)
                 svg = ET.tostring(root, encoding='utf-8')

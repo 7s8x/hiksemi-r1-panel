@@ -26,6 +26,23 @@ from ui_preview import preview_web_source  # noqa: E402
 
 
 class WebTests(unittest.TestCase):
+    def test_temperature_units_share_numeric_baseline(self):
+        from ui_preview import demo_data
+        for theme in ('mocha', 'latte'):
+            root = ElementTree.fromstring(render_information(demo_data(), theme=theme))
+            temperatures = [node for node in root.iter()
+                            if node.tag.endswith('text') and any(span.text == '°C' for span in node)]
+            self.assertEqual(len(temperatures), 6)
+            self.assertEqual(temperatures[0].get('y'), '197')
+            for node in temperatures:
+                self.assertIsNone(node.get('dominant-baseline'))
+                self.assertEqual(node.get('font-size'), '39')
+                self.assertEqual(node.get('text-anchor'), 'end')
+                unit = next(span for span in node if span.text == '°C')
+                self.assertEqual(unit.get('font-size'), '17')
+                self.assertIsNone(unit.get('dominant-baseline'))
+                self.assertIsNone(unit.get('dy'))
+
     def setUp(self):
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -124,7 +141,7 @@ class WebTests(unittest.TestCase):
         self.assertIn('cx="94" cy="209" r="58"', web_panel)
         self.assertIn('x="329" y="250"', web_panel)
         self.assertNotIn('x="329" y="269"', web_panel)
-        self.assertIn('font-size="39" font-weight="700" dominant-baseline="middle" text-anchor="end">56', web_panel)
+        self.assertIn('font-size="39" font-weight="700" text-anchor="end">56', web_panel)
         self.assertNotIn("Synology", panel)
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
@@ -136,11 +153,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("常亮", fans)
         self.assertIn("关闭", fans)
         self.assertNotIn("温控依据", fans)
-        self.assertIn("硬盘最高 ", fans)
-        self.assertLess(fans.index("风扇控制"), fans.index("硬盘最高 "))
+        self.assertNotIn("硬盘最高 ", fans)
         self.assertLess(fans.index("风扇控制"), fans.index("灯光控制"))
-        self.assertIn("65°C", fans)
-        self.assertIn("39°C", fans)
+        self.assertNotIn("65°C", fans)
+        self.assertNotIn("39°C", fans)
         self.assertNotIn("温度与灯光", fans)
         self.assertNotIn("{{", panel + fans)
         fan_text = ElementTree.fromstring(fans).findall(".//{http://www.w3.org/2000/svg}text")
@@ -156,7 +172,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("独立温控服务", web_fans)
         self.assertNotIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("45秒后返回原档位", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("全速 · 45s", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -494,7 +510,7 @@ class LogTests(unittest.TestCase):
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
         cases = [({'live': False}, '离线'),
                  ({'live': True, 'mode': 'auto', 'desired': 'full'}, '切换中'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '0秒后返回原档位'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速 · 0s'),
                  ({'live': True, 'mode': 'full', 'desired': 'full'}, '结束后返回原档位'),
                  ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准'),
                  ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音'),

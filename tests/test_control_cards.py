@@ -78,12 +78,15 @@ class ControlCardTests(unittest.TestCase):
         root=ET.fromstring(render_fans(self.data()))
         cards=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='16' and n.get('width')=='344']
         self.assertEqual([(n.get('y'),n.get('height')) for n in cards],[('99','197'),('310','197'),('521','132'),('666','132'),('811','132')])
-        badges=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='260']
+        badges=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='279']
+        self.assertEqual({n.get('width') for n in badges},{'65'})
         self.assertEqual([(n.get('y'),n.get('height')) for n in badges],[('534','23'),('679','23'),('824','23')])
+        separators=[n for n in root.findall('.//s:line',NS) if n.get('y1') in ('227','438')]
+        self.assertEqual([(n.get('x1'),n.get('x2')) for n in separators],[('171','344'),('171','344')])
         text=''.join(root.itertext())
-        for removed in ('温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
+        for removed in ('CPU 最高 ','硬盘最高 ','温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
             self.assertNotIn(removed,text)
-        for kept in ('CPU 最高 ','硬盘最高 ','全速','标准','静音','呼吸','常亮','关闭'):
+        for kept in ('全速','标准','静音','呼吸','常亮','关闭'):
             self.assertIn(kept,text)
 
     def test_both_button_rows_match_physical_hit_regions_and_gaps(self):
@@ -123,10 +126,19 @@ class ControlCardTests(unittest.TestCase):
     def test_fan_countdown_return_target_and_missing_temperature(self):
         data=self.data('full');data['fan_basis']=(None,None,0)
         svg=render_fans(data)
-        self.assertIn('29秒后返回静音'.encode(),svg)
-        self.assertIn('29秒后返回静音'.encode(),svg)
+        self.assertIn('全速 · 29s'.encode(),svg)
+        self.assertIn('结束后返回静音'.encode(),svg)
+        root=ET.fromstring(svg)
+        hint=next(n for n in root.findall('.//s:text',NS) if n.text=='结束后返回静音')
+        self.assertEqual((hint.get('x'),hint.get('y')),('188','577'))
+        labels=[n for n in root.findall('.//s:text',NS) if n.get('x')=='94' and n.text=='全速']
+        self.assertEqual(labels[0].get('y'),'620')
+        badge=next(n for n in root.findall('.//s:rect',NS) if n.get('y')=='534')
+        self.assertEqual((badge.get('x'),badge.get('width')),('240','104'))
+        self.assertNotIn('29秒后返回静音'.encode(),svg)
         self.assertNotIn(b'None',svg)
-        self.assertIn(b'--',svg)
+        self.assertNotIn('CPU 最高'.encode(),svg)
+        self.assertNotIn('硬盘最高'.encode(),svg)
         data['control']={'live':False}
         self.assertIn('>离线</text>'.encode(),render_fans(data))
 
