@@ -125,7 +125,10 @@ def vm_values(data):
     values = {}
     vms = list(data.get("vms") or [])
     running = sum(status == "RUNNING" for _, status in vms[:3])
-    values["VM_SUMMARY"] = f"{running} / {min(len(vms), 3)} 运行中"
+    total = min(len(vms), 3)
+    values["VM_SUMMARY"] = f"{running} / {total} 运行中"
+    values["VM_BADGE_TEXT"] = f"{running} / {total}"
+    values["VM_BADGE_COLOR"] = "#9ee8ce" if total and running == total else "#f4b46f" if total else "#9bb1be"
     for index in range(3):
         vmid, status = vms[index] if index < len(vms) else (f"VM {SITE.vmids[index]}" if index < len(SITE.vmids) else "VM --", "UNKNOWN")
         values[f"VM{index}_NAME"] = str(vmid)[:16]
@@ -230,7 +233,10 @@ def fan_values(data: dict) -> dict:
         back = {'high':'标准', 'low':'静音', 'auto':'标准'}.get(control.get('return_to'), '原档位')
         seconds = control.get('remaining')
         compact_status = f'全速 · {seconds}秒后返回{back}' if seconds is not None else f'全速 · 结束后返回{back}'
-    values.update(CONTROL_CARD_STATUS=compact_status, CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
+    fan_badge = {'high':'标准', 'low':'静音', 'full':'全速', 'offline':'离线', 'switching':'切换中'}.get(controller_state, '未知')
+    values.update(FAN_BADGE_TEXT=fan_badge,
+                  FAN_BADGE_COLOR="#9ee8ce" if controller_state in ('high','low') else "#f4b46f",
+                  CONTROL_CARD_STATUS=compact_status, CONTROL_STATUS=status_text, CONTROL_DETAIL=detail,
                   CONTROL_COLOR=control_color,
                   FULL_BUTTON_BG="#6bbfe5" if full_active else idle_bg,
                   FULL_BUTTON_FG=active_fg if full_active else idle_fg,
@@ -242,7 +248,9 @@ def fan_values(data: dict) -> dict:
     mode = rgb_state[0] if rgb_state is not None else (0 if data.get("rgb") is False else None)
     rgb_status = {0: "灯光已关闭", 1: "常亮", 2: "彩虹", 3: "呼吸"}.get(mode, "灯光已开启" if data.get("rgb") is True else "灯光状态不可用")
     swatch = ("#%02x%02x%02x" % tuple(rgb_state[1:])) if mode in (1, 3) else "#9bb1be"
-    values.update(RGB_STATUS=rgb_status, RGB_COLOR="#9bb1be" if mode == 0 else "#edf6f8" if mode is not None else "#f4b46f",
+    values.update(RGB_BADGE_TEXT={0:"关闭",1:"常亮",2:"彩虹",3:"呼吸"}.get(mode,"未知"),
+                  RGB_BADGE_COLOR="#9bb1be" if mode == 0 else "#9ee8ce" if mode is not None else "#f4b46f",
+                  RGB_STATUS=rgb_status, RGB_COLOR="#9bb1be" if mode == 0 else "#edf6f8" if mode is not None else "#f4b46f",
                   RGB_SWATCH="RGB_SWATCH_COLOR", RGB_SWATCH_OPACITY=1 if mode in (1, 3) else 0,
                   RGB_BREATHE_BG="#6bbfe5" if mode == 3 else idle_bg,
                   RGB_BREATHE_FG=active_fg if mode == 3 else idle_fg,

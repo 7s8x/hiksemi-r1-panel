@@ -114,39 +114,45 @@
     <text x="329" y="468" fill="#a6e3a1" font-size="17" text-anchor="end">静音</text>
 
     <rect x="16" y="521" width="344" height="132" rx="7" fill="#1e1e2e" stroke="#45475a"/>
-    <text x="32" y="547" fill="#cdd6f4" font-size="16" font-weight="700">虚拟机状态</text>
-    <text x="344" y="546" fill="#a6adc8" font-size="11" text-anchor="end">3 / 3 运行中</text>
-    <text x="32" y="575" fill="#cdd6f4" font-size="14" font-weight="600">VM 100</text>
-    <text x="344" y="575" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
-    <text x="32" y="603" fill="#cdd6f4" font-size="14" font-weight="600">VM 111</text>
-    <text x="344" y="603" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
-    <text x="32" y="631" fill="#cdd6f4" font-size="14" font-weight="600">VM 200</text>
-    <text x="344" y="631" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
+    <text x="32" y="547" fill="#cdd6f4" font-size="16" font-weight="700">风扇控制</text>
+    <rect x="260" y="534" width="84" height="23" rx="6" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <circle cx="273" cy="545.5" r="3.5" fill="#a6e3a1"/>
+    <text x="286" y="550" fill="#a6e3a1" font-size="11" font-weight="600">静音</text>
+    <text x="32" y="570" fill="#89b4fa" font-size="14" font-weight="700">静音模式</text>
+    <text x="32" y="593" fill="#a6adc8" font-size="10">CPU 最高 <tspan fill="#fab387" font-size="17">53°C</tspan></text>
+    <text x="200" y="593" fill="#a6adc8" font-size="10">硬盘最高 <tspan fill="#89dceb" font-size="17">36°C</tspan></text>
+    <rect x="32" y="605" width="100" height="35" rx="5" fill="#313244"/>
+    <text x="82" y="628" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">全速</text>
+    <rect x="138" y="605" width="100" height="35" rx="5" fill="#313244"/>
+    <text x="188" y="628" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">标准</text>
+    <rect x="244" y="605" width="100" height="35" rx="5" fill="#89b4fa"/>
+    <text x="294" y="628" fill="#11111b" font-size="14" font-weight="700" text-anchor="middle">静音</text>
 
     <rect x="16" y="666" width="344" height="132" rx="7" fill="#1e1e2e" stroke="#45475a"/>
-    <text x="32" y="692" fill="#cdd6f4" font-size="16" font-weight="700">风扇控制</text>
-    <text x="344" y="691" fill="#a6adc8" font-size="12" text-anchor="end">双路温控</text>
-    <text x="32" y="715" fill="#89b4fa" font-size="14" font-weight="700">静音模式</text>
-    <text x="32" y="738" fill="#a6adc8" font-size="10">CPU 最高 <tspan fill="#fab387" font-size="17">53°C</tspan></text>
-    <text x="200" y="738" fill="#a6adc8" font-size="10">硬盘最高 <tspan fill="#89dceb" font-size="17">36°C</tspan></text>
+    <text x="32" y="692" fill="#cdd6f4" font-size="16" font-weight="700">灯光控制</text>
+    <rect x="260" y="679" width="84" height="23" rx="6" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <circle cx="273" cy="690.5" r="3.5" fill="#a6adc8"/>
+    <text x="286" y="695" fill="#a6adc8" font-size="11" font-weight="600">关闭</text>
+    <circle cx="43" cy="720" r="9" fill="#9bb1be" fill-opacity="0"/>
+    <text x="63" y="726" fill="#a6adc8" font-size="16" font-weight="700">灯光已关闭</text>
     <rect x="32" y="750" width="100" height="35" rx="5" fill="#313244"/>
-    <text x="82" y="773" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">全速</text>
+    <text x="82" y="773" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">呼吸</text>
     <rect x="138" y="750" width="100" height="35" rx="5" fill="#313244"/>
-    <text x="188" y="773" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">标准</text>
+    <text x="188" y="773" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">常亮</text>
     <rect x="244" y="750" width="100" height="35" rx="5" fill="#89b4fa"/>
-    <text x="294" y="773" fill="#11111b" font-size="14" font-weight="700" text-anchor="middle">静音</text>
-
+    <text x="294" y="773" fill="#11111b" font-size="14" font-weight="700" text-anchor="middle">关闭</text>
     <rect x="16" y="811" width="344" height="132" rx="7" fill="#1e1e2e" stroke="#45475a"/>
-    <text x="32" y="837" fill="#cdd6f4" font-size="16" font-weight="700">灯光控制</text>
-    <text x="344" y="836" fill="#a6adc8" font-size="12" text-anchor="end">机身 RGB</text>
-    <circle cx="43" cy="865" r="9" fill="#9bb1be" fill-opacity="0"/>
-    <text x="63" y="871" fill="#a6adc8" font-size="16" font-weight="700">灯光已关闭</text>
-    <rect x="32" y="895" width="100" height="35" rx="5" fill="#313244"/>
-    <text x="82" y="918" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">呼吸</text>
-    <rect x="138" y="895" width="100" height="35" rx="5" fill="#313244"/>
-    <text x="188" y="918" fill="#cdd6f4" font-size="14" font-weight="700" text-anchor="middle">常亮</text>
-    <rect x="244" y="895" width="100" height="35" rx="5" fill="#89b4fa"/>
-    <text x="294" y="918" fill="#11111b" font-size="14" font-weight="700" text-anchor="middle">关闭</text>
+    <text x="32" y="837" fill="#cdd6f4" font-size="16" font-weight="700">虚拟机状态</text>
+    <rect x="260" y="824" width="84" height="23" rx="6" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <circle cx="273" cy="835.5" r="3.5" fill="#a6e3a1"/>
+    <text x="286" y="840" fill="#a6e3a1" font-size="11" font-weight="600">3 / 3</text>
+    <text x="32" y="865" fill="#cdd6f4" font-size="14" font-weight="600">VM 100</text>
+    <text x="344" y="865" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
+    <text x="32" y="893" fill="#cdd6f4" font-size="14" font-weight="600">VM 111</text>
+    <text x="344" y="893" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
+    <text x="32" y="921" fill="#cdd6f4" font-size="14" font-weight="600">VM 200</text>
+    <text x="344" y="921" fill="#a6e3a1" font-size="13" text-anchor="end">运行中</text>
+
   </g>
 </svg>
 </g></svg>

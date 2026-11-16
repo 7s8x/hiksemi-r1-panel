@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 213 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
+- 当前源码的 214 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
 
 ### 尚未验证
 
@@ -274,7 +274,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 
 原子替换、文件同步与运行状态有效期的边界见 [原子写语义说明](docs/atomic-writes.md)。
 
-控制页下部依次为虚拟机状态、风扇控制、灯光控制三张132px等高卡片（间距13px），虚拟机卡显示最多三台配置VM的编号与状态；灯光卡提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
+控制页下部依次为风扇控制、灯光控制、虚拟机状态三张132px等高卡片（间距13px），虚拟机卡置于页面最下部，显示最多三台配置VM的编号与状态；三个卡片右上角统一为状态圆点徽标，显示风扇模式、灯光模式及VM运行数量；灯光卡提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
 
 登录后的实体屏实时镜像默认折叠，展开后每5秒获取PNG，展开/切页/亮度变化立即刷新；收起或页面转入后台时停止取图，切页和亮度控制仍可直接使用。上方 Web 双页使用内联 SVG，固定布局仅挂载一次，每 15 秒以 JSON 局部更新数字、环弧、容量条和状态；失效或请求失败时隐藏旧画面。
 

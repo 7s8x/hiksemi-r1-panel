@@ -56,8 +56,8 @@ class FanProfileTests(unittest.TestCase):
             self.assertIn("全速 · 29秒后返回".encode(), svg)
             self.assertIn("呼吸".encode(), svg)
             self.assertIn("常亮".encode(), svg)
-            self.assertIn(b'x="32" y="895" width="100" height="35"', svg)
-            self.assertIn(b'x="138" y="895" width="100" height="35"', svg)
+            self.assertIn(b'x="32" y="750" width="100" height="35"', svg)
+            self.assertIn(b'x="138" y="750" width="100" height="35"', svg)
 
     def test_three_buttons_map_to_expected_modes_and_render(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -67,7 +67,7 @@ class FanProfileTests(unittest.TestCase):
                         294: ("low", "静音模式")}
             for x, (mode, label) in expected.items():
                 with self.subTest(mode=mode):
-                    self.assertEqual(fan_button_mode((x, 767)), mode)
+                    self.assertEqual(fan_button_mode((x, 622)), mode)
                     request_mode(mode, mode_file)
                     publish_status(mode, 200, status_file)
                     status = control_status(mode_file, status_file)
