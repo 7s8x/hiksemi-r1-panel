@@ -68,12 +68,18 @@
     <rect x="260" y="824" width="84" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
     <circle cx="273" cy="835.5" r="3.5" fill="{{VM_BADGE_COLOR}}"/>
     <text x="286" y="840" fill="{{VM_BADGE_COLOR}}" font-size="11" font-weight="600">{{VM_BADGE_TEXT}}</text>
-    <text x="32" y="865" fill="#edf6f8" font-size="14" font-weight="600">{{VM0_NAME}}</text>
-    <text x="344" y="865" fill="{{VM0_COLOR}}" font-size="13" text-anchor="end">{{VM0_STATUS}}</text>
-    <text x="32" y="893" fill="#edf6f8" font-size="14" font-weight="600">{{VM1_NAME}}</text>
-    <text x="344" y="893" fill="{{VM1_COLOR}}" font-size="13" text-anchor="end">{{VM1_STATUS}}</text>
-    <text x="32" y="921" fill="#edf6f8" font-size="14" font-weight="600">{{VM2_NAME}}</text>
-    <text x="344" y="921" fill="{{VM2_COLOR}}" font-size="13" text-anchor="end">{{VM2_STATUS}}</text>
+    <rect x="32" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <text x="82" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM0_NAME}}</text>
+    <circle cx="56" cy="916" r="3" fill="{{VM0_COLOR}}"/>
+    <text x="90" y="920" fill="{{VM0_COLOR}}" font-size="12" text-anchor="middle">{{VM0_STATUS}}</text>
+    <rect x="138" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <text x="188" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM1_NAME}}</text>
+    <circle cx="162" cy="916" r="3" fill="{{VM1_COLOR}}"/>
+    <text x="196" y="920" fill="{{VM1_COLOR}}" font-size="12" text-anchor="middle">{{VM1_STATUS}}</text>
+    <rect x="244" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <text x="294" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM2_NAME}}</text>
+    <circle cx="268" cy="916" r="3" fill="{{VM2_COLOR}}"/>
+    <text x="302" y="920" fill="{{VM2_COLOR}}" font-size="12" text-anchor="middle">{{VM2_STATUS}}</text>
 
   </g>
 </svg>

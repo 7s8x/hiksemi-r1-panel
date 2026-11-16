@@ -11,6 +11,17 @@ from ui_preview import demo_data
 NS={'s':'http://www.w3.org/2000/svg'}
 
 class ControlCardTests(unittest.TestCase):
+    def test_three_vm_status_bars_share_bottom_row_and_are_not_controls(self):
+        root=ET.fromstring(render_fans(self.data()))
+        bars=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='878']
+        self.assertEqual([(n.get('x'),n.get('width'),n.get('height')) for n in bars],
+                         [('32','100','52'),('138','100','52'),('244','100','52')])
+        labels=[n for n in root.findall('.//s:text',NS) if n.get('y')=='899']
+        self.assertEqual([n.text for n in labels],['VM 100','VM 111','VM 200'])
+        for x in (82,188,294):
+            self.assertIsNone(panel.fan_button_mode((x,900)))
+            self.assertIsNone(panel.rgb_button_action((x,900)))
+
     def test_duplicate_body_status_removed_and_buttons_taller(self):
         svg=render_fans(self.data(mode='low',rgb=(0,0,0,0))).decode()
         self.assertNotIn('静音模式',svg)
@@ -18,7 +29,7 @@ class ControlCardTests(unittest.TestCase):
         self.assertIn('>静音</text>',svg)
         self.assertIn('>关闭</text>',svg)
         root=ET.fromstring(svg)
-        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('width')=='100']
+        buttons=[n for n in root.findall('.//s:rect',NS) if n.get('width')=='100' and n.get('y') in ('588','733')]
         self.assertEqual(len(buttons),6)
         self.assertEqual({n.get('height') for n in buttons},{'52'})
 
