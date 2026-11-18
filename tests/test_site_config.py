@@ -26,7 +26,7 @@ class SiteConfigTests(unittest.TestCase):
                 self.assertEqual(states, ("present",) * count + ("empty",) * (4 - count))
 
     def test_bad_config_is_not_silently_replaced_with_defaults(self):
-        cases = [{"vmids": [True]}, {"vmids": [100, 100]}, {"vmids": [100, 101, 102, 103]},
+        cases = [{"vmids": [True]}, {"vmids": [100, 100]}, {"vmids": list(range(100, 165))},
                  {"node": "../../other"}, {"stores": ["local", "local"]},
                  {"occupied_bays": [0]}, {"occupied_bays": [1, 1]},
                  {"controller": "bad"}, {"unknown": "ignored?"},
@@ -52,6 +52,25 @@ class SiteConfigTests(unittest.TestCase):
         with patch.object(vms.subprocess,'run',return_value=SimpleNamespace(stdout=json.dumps(records))) as query:
             self.assertEqual(vms.vm_statuses((100,111,200)),{100:'RUNNING',111:'STOPPED',200:'RUNNING'})
             query.assert_called_once()
+
+    def test_vm_configuration_scales_without_discovering_unconfigured_guests(self):
+        import r1_collection as shared
+        import r1_snapshot as snapshot
+        with TemporaryDirectory() as directory:
+            file = Path(directory) / "site.json"
+            for count in (0, 1, 2, 4, 64):
+                ids = tuple(range(100, 100 + count))
+                file.write_text(json.dumps({"vmids": ids}))
+                site = load_site(file)
+                self.assertEqual(site.vmids, ids)
+                record = {"schema": 1, "boot": "test", "published_at": 100, "groups": {
+                    "vm": {"valid": True, "at": 100, "interval": 10,
+                           "data": {"vms": [[v, "RUNNING"] for v in reversed(ids)] + [[999, "RUNNING"]]}}}}
+                with patch.object(shared, "SITE", site), patch.object(snapshot, "SITE", site):
+                    self.assertEqual(shared.decode_snapshot(record, now=100, boot="test")["vms"],
+                                     [(f"VM {v}", "RUNNING") for v in ids])
+                    self.assertEqual(shared.decode_snapshot(record, now=121, boot="test")["vms"],
+                                     [(f"VM {v}", "UNKNOWN") for v in ids])
 
     def test_missing_unexpected_and_zero_disk_policy(self):
         config = replace(SiteConfig(), occupied_bays=(1,))

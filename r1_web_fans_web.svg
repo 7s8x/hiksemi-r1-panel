@@ -107,21 +107,23 @@
     <text x="306" y="765" fill="{{RGB_OFF_BUTTON_FG}}" font-size="14" font-weight="700" text-anchor="middle">关闭</text>
     <rect x="16" y="811" width="344" height="132" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="837" fill="#edf6f8" font-size="16" font-weight="700">虚拟机状态</text>
-    <rect x="279" y="824" width="65" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
-    <circle cx="292" cy="835.5" r="3.5" fill="{{VM_BADGE_COLOR}}"/>
-    <text x="305" y="840" fill="{{VM_BADGE_COLOR}}" font-size="12" font-weight="600">{{VM_BADGE_TEXT}}</text>
-    <rect x="32" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
-    <text x="82" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM0_NAME}}</text>
-    <circle cx="56" cy="916" r="3" fill="{{VM0_COLOR}}"/>
-    <text x="90" y="920" fill="{{VM0_COLOR}}" font-size="12" text-anchor="middle">{{VM0_STATUS}}</text>
-    <rect x="138" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
-    <text x="188" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM1_NAME}}</text>
-    <circle cx="162" cy="916" r="3" fill="{{VM1_COLOR}}"/>
-    <text x="196" y="920" fill="{{VM1_COLOR}}" font-size="12" text-anchor="middle">{{VM1_STATUS}}</text>
-    <rect x="244" y="878" width="100" height="52" rx="5" fill="#244354" stroke="#3a5260" stroke-width="1"/>
-    <text x="294" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM2_NAME}}</text>
-    <circle cx="268" cy="916" r="3" fill="{{VM2_COLOR}}"/>
-    <text x="302" y="920" fill="{{VM2_COLOR}}" font-size="12" text-anchor="middle">{{VM2_STATUS}}</text>
+    <rect x="{{VM_BADGE_X}}" y="824" width="{{VM_BADGE_WIDTH}}" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <circle cx="{{VM_BADGE_DOT_X}}" cy="835.5" r="3.5" fill="{{VM_BADGE_COLOR}}"/>
+    <text x="{{VM_BADGE_TEXT_X}}" y="840" fill="{{VM_BADGE_COLOR}}" font-size="12" font-weight="600">{{VM_BADGE_TEXT}}</text>
+    <text x="188" y="883" fill="#9bb1be" font-size="14" text-anchor="middle">{{VM_EMPTY_TEXT}}</text>
+    <text x="32" y="866" fill="#9bb1be" font-size="12">{{VM_SUMMARY}}</text>
+    <rect x="{{VM0_X}}" y="878" width="{{VM0_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM0_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM0_VISIBLE}}"/>
+    <text x="{{VM0_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM0_NAME}}</text>
+    <circle cx="{{VM0_DOT_X}}" cy="916" r="3" fill="{{VM0_COLOR}}" fill-opacity="{{VM0_VISIBLE}}"/>
+    <text x="{{VM0_STATUS_X}}" y="920" fill="{{VM0_COLOR}}" font-size="12" text-anchor="middle">{{VM0_STATUS}}</text>
+    <rect x="{{VM1_X}}" y="878" width="{{VM1_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM1_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM1_VISIBLE}}"/>
+    <text x="{{VM1_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM1_NAME}}</text>
+    <circle cx="{{VM1_DOT_X}}" cy="916" r="3" fill="{{VM1_COLOR}}" fill-opacity="{{VM1_VISIBLE}}"/>
+    <text x="{{VM1_STATUS_X}}" y="920" fill="{{VM1_COLOR}}" font-size="12" text-anchor="middle">{{VM1_STATUS}}</text>
+    <rect x="{{VM2_X}}" y="878" width="{{VM2_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM2_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM2_VISIBLE}}"/>
+    <text x="{{VM2_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM2_NAME}}</text>
+    <circle cx="{{VM2_DOT_X}}" cy="916" r="3" fill="{{VM2_COLOR}}" fill-opacity="{{VM2_VISIBLE}}"/>
+    <text x="{{VM2_STATUS_X}}" y="920" fill="{{VM2_COLOR}}" font-size="12" text-anchor="middle">{{VM2_STATUS}}</text>
 
   </g>
 </svg>

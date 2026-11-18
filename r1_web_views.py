@@ -122,18 +122,49 @@ def information_values(data: dict) -> dict:
 
 
 def vm_values(data):
-    values = {}
     vms = list(data.get("vms") or [])
-    running = sum(status == "RUNNING" for _, status in vms[:3])
-    total = min(len(vms), 3)
-    values["VM_SUMMARY"] = f"{running} / {total} 运行中"
-    values["VM_BADGE_TEXT"] = f"{running} / {total}"
-    values["VM_BADGE_COLOR"] = "#9ee8ce" if total and running == total else "#f4b46f" if total else "#9bb1be"
+    total = len(vms)
+    unavailable = bool(total) and (data.get("freshness") or {}).get("groups", {}).get("vm") is False
+    if unavailable:
+        vms = [(name, "UNKNOWN") for name, _ in vms]
+    running = sum(status == "RUNNING" for _, status in vms)
+    badge = f"{'—' if unavailable else running} / {total}"
+    width = 82 if len(badge) > 5 else 65
+    summary = ""
+    if total > 3:
+        extra = vms[3:]
+        summary = f"另有 {len(extra)} 台"
+        if not unavailable:
+            stopped = sum(status == "STOPPED" for _, status in extra)
+            unknown = sum(status not in ("RUNNING", "STOPPED") for _, status in extra)
+            if stopped:
+                summary += f" · {stopped} 台已停止"
+            if unknown:
+                summary += f" · {unknown} 台未知"
+    if unavailable:
+        summary = f"{summary} · 数据暂不可用" if summary else "数据暂不可用"
+    values = {
+        "VM_BADGE_TEXT": badge,
+        "VM_BADGE_COLOR": "#9ee8ce" if total and running == total else "#f4b46f" if total else "#9bb1be",
+        "VM_BADGE_WIDTH": width, "VM_BADGE_X": 344 - width,
+        "VM_BADGE_DOT_X": 357 - width, "VM_BADGE_TEXT_X": 370 - width,
+        "VM_EMPTY_TEXT": "" if total else "未配置监控",
+        "VM_SUMMARY": summary,
+    }
+    visible = min(total, 3)
+    tile_width = (312 - 6 * (visible - 1)) // visible if visible else 0
     for index in range(3):
-        vmid, status = vms[index] if index < len(vms) else (f"VM {SITE.vmids[index]}" if index < len(SITE.vmids) else "VM --", "UNKNOWN")
-        values[f"VM{index}_NAME"] = str(vmid)[:16]
-        values[f"VM{index}_STATUS"] = {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知")
-        values[f"VM{index}_COLOR"] = "#9ee8ce" if status == "RUNNING" else "#f4b46f"
+        shown = index < visible
+        vmid, status = vms[index] if shown else ("", "UNKNOWN")
+        x = 32 + index * (tile_width + 6) if shown else 32
+        center = x + tile_width / 2
+        values.update({f"VM{index}_{key}": value for key, value in {
+            "X": x, "WIDTH": tile_width if shown else 0, "VISIBLE": int(shown),
+            "CENTER": f"{center:g}", "DOT_X": f"{center - 26:g}", "STATUS_X": f"{center + 8:g}",
+            "NAME": str(vmid)[:16],
+            "STATUS": {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知") if shown else "",
+            "COLOR": "#9ee8ce" if status == "RUNNING" else "#f4b46f",
+        }.items()})
     return values
 
 def render_information(data: dict, *, web_layout: bool = True, theme: str | None = None) -> bytes:

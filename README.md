@@ -80,7 +80,7 @@ install -d -m 0700 /var/lib/r1-panel
 install -m 0600 site.example.json /var/lib/r1-panel/site.json
 ```
 
-随后按实机设置 PVE 节点、最多三台 VM、NVMe 存储源、SATA 控制器及 BAY 映射、`occupied_bays`。允许 0–4 块 SATA：有意空置的盘位不计为缺盘；配置为在位却丢失、出现未登记硬盘或传感器归属不明会触发保护。进程启动时读取配置，修改后须受保护重启相关服务。存储源必须确实属于所显示的 NVMe，不要把多盘存储池当作单盘用量。
+随后按实机设置 PVE 节点、0–64 台受监控 VM（按 `vmids` 顺序优先展示）、NVMe 存储源、SATA 控制器及 BAY 映射、`occupied_bays`。允许 0–4 块 SATA：有意空置的盘位不计为缺盘；配置为在位却丢失、出现未登记硬盘或传感器归属不明会触发保护。进程启动时读取配置，修改后须受保护重启相关服务。存储源必须确实属于所显示的 NVMe，不要把多盘存储池当作单盘用量。
 
 在已有模块路径和校验值审核通过后，将其写入`/var/lib/r1-panel/driver.env`（权限0600），格式为两行`R1_IT87_MODULE=/绝对路径/it87.ko`与`R1_IT87_SHA256=审核后的64位摘要`；不要填示例路径或复制其他机器的模块。先将同一模块路径与校验值作为环境变量传给 `.venv/bin/python r1_doctor.py` 做只读预检；直接运行时不会自动执行 `driver.env`，systemd 则通过服务中的 `EnvironmentFile` 读取它。该命令不加载模块、不写 PWM/RGB，不替代现场验收。
 
@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 223 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
+- 当前源码的 226 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
 
 ### 尚未验证
 
@@ -274,7 +274,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 
 原子替换、文件同步与运行状态有效期的边界见 [原子写语义说明](docs/atomic-writes.md)。
 
-控制页下部依次为风扇控制、灯光控制、虚拟机状态三张132px等高卡片（间距13px），虚拟机卡置于页面最下部，显示最多三台配置VM的编号与状态；三个卡片右上角统一为状态圆点徽标，显示风扇模式、灯光模式及VM运行数量；灯光卡提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
+控制页下部依次为风扇控制、灯光控制、虚拟机状态三张132px等高卡片（间距13px），虚拟机卡置于页面最下部，底部最多显示前三台配置 VM，状态小卡片固定 52px 高、按台数等宽铺满，超出三台用摘要显示；三个卡片右上角统一为状态圆点徽标，显示风扇模式、灯光模式及全部受监控 VM 的运行数／总数；灯光卡提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
 
 登录后的实体屏实时镜像默认折叠，展开后每5秒获取PNG，展开/切页/亮度变化立即刷新；收起或页面转入后台时停止取图，切页和亮度控制仍可直接使用。上方 Web 双页使用内联 SVG，固定布局仅挂载一次，每 15 秒以 JSON 局部更新数字、环弧、容量条和状态；失效或请求失败时隐藏旧画面。
 

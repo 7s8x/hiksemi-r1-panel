@@ -33,6 +33,53 @@ class ControlCardTests(unittest.TestCase):
         self.assertEqual(len(buttons),6)
         self.assertEqual({n.get('height') for n in buttons},{'52'})
 
+    def test_vm_tile_width_changes_but_height_and_row_do_not(self):
+        from r1_web_dom import layout, project
+        from r1_web_views import fan_values
+        def card(root):
+            return [(n.tag, {k: v for k, v in n.attrib.items() if k != 'id'}, (n.text or '').strip())
+                    for n in root.iter() if n.get('y') in
+                    ('811','824','837','840','866','878','883','899','920')
+                    or n.get('cy') in ('835.5','916')]
+        for theme in ('mocha', 'latte'):
+            page, _ = layout('fans', theme)
+            for count, widths in ((0, []), (1, [312]), (2, [153, 153]),
+                                  (3, [100]*3), (4, [100]*3), (5, [100]*3), (64, [100]*3)):
+                with self.subTest(theme=theme, count=count):
+                    data = self.data()
+                    data['vms'] = [(f'VM {v}', 'RUNNING') for v in range(100, 100+count)]
+                    direct = validate_svg(render_fans(data, theme=theme))
+                    dom = ET.fromstring(page['svg'])
+                    nodes = {n.get('id'): n for n in dom.iter() if n.get('id')}
+                    for (key, attr), value in zip(page['bindings'], project('fans', fan_values(data), theme), strict=True):
+                        if attr == 'text':
+                            nodes[key].text = value
+                        else:
+                            nodes[key].set(attr, value)
+                    self.assertEqual(card(dom), card(direct))
+                    bars = [n for n in direct.findall('.//s:rect', NS) if n.get('y') == '878']
+                    visible = [n for n in bars if n.get('fill-opacity') == '1']
+                    self.assertEqual([int(n.get('width')) for n in visible], widths)
+                    self.assertTrue(all(n.get('height') == '52' for n in bars))
+                    if visible:
+                        self.assertEqual(int(visible[-1].get('x')) + widths[-1], 344)
+                    self.assertIn(f'{count} / {count}', list(direct.itertext()))
+                    self.assertEqual('未配置监控' in list(direct.itertext()), count == 0)
+
+    def test_vm_overflow_reports_hidden_status_and_expiry_never_looks_empty(self):
+        data = self.data()
+        data['vms'] += [('VM 400','STOPPED'), ('VM 401','UNKNOWN'), ('VM 402','RUNNING')]
+        svg = render_fans(data).decode()
+        self.assertIn('4 / 6', svg)
+        self.assertIn('另有 3 台 · 1 台已停止 · 1 台未知', svg)
+        self.assertNotIn('VM 400', svg)
+        data['freshness'] = {'valid': True, 'groups': {'vm': False}}
+        svg = render_fans(data).decode()
+        self.assertIn('— / 6', svg)
+        self.assertIn('数据暂不可用', svg)
+        self.assertNotIn('>运行中<', svg)
+        self.assertNotIn('未配置监控', svg)
+
     def test_header_badges_share_style_and_report_real_states(self):
         from r1_web_views import fan_values
         data=self.data(mode='low',rgb=(0,0,0,0))
