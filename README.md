@@ -11,7 +11,7 @@
 ## 它能做什么
 
 **实体前屏**
-376×960 的 DSI 屏按「信息页 → 风扇页 → PVE 控制台 → 黑屏」四页循环，支持触摸双向滑动。信息页显示 CPU、内存、VM 状态，以及 NVMe 和 BAY 1–4 五张硬盘卡的型号、温度、占用率；风扇页显示机箱风扇与 CPU 风扇的转速环形图。
+376×960 的 DSI 屏按「信息页 → 风扇页 → PVE 控制台 → 黑屏」四页循环，支持触摸双向滑动。信息页显示 CPU、内存，以及 NVMe 和 BAY 1–4 五张硬盘卡的型号、温度、占用率；风扇页显示机箱风扇与 CPU 风扇的转速环形图，下方为独立虚拟机状态、风扇控制、灯光控制卡片。
 
 **独立软件温控**
 绕过 BIOS 的风扇策略，用 IT8613E 传感器自己算曲线。FAN2（机箱）按在位 SATA 盘最高温度及 CPU 高温辅助曲线中较高者调整，FAN3（CPU）独立按 CPU 曲线调整。PWM 最低 120；应在位盘缺失、传感器或盘位映射异常、风扇停转时请求两路全速。风扇有「标准」「静音」两套独立 PWM 曲线，可分别编辑；「全速」是 60 秒临时覆盖，到期自动回落到进入全速前所选的档位。
@@ -30,7 +30,7 @@
 | --- | --- |
 | 机型 | 海康 R1，`/sys/class/dmi/id/board_name` 必须为 `HS-AFS-R1` |
 | 屏幕 | 376×960 DSI，`/dev/fb0` |
-| 触摸 | `CST0836:00 0911:5288` |
+| 触摸 | `CST0836:00 0911:5288`，按绝对坐标与触摸按键能力筛选，不固定 event 编号 |
 | 传感器 | IT8613E（需要单独构建的 `it87` 内核模块） |
 | 系统 | Proxmox VE，systemd，Python 3.12+ |
 | 依赖 | 无第三方 Python 包，全部标准库；Linux 系统需 Cairo（`libcairo2`）、Fontconfig（`libfontconfig1`）、项目附带 OFL 字体、PVE 的 `pvesh`/`pvesm`/`qm`；仅 `init --tls` 需要 `openssl` |
@@ -80,7 +80,7 @@ install -d -m 0700 /var/lib/r1-panel
 install -m 0600 site.example.json /var/lib/r1-panel/site.json
 ```
 
-随后按实机设置 PVE 节点、最多两台 VM、NVMe 存储源、SATA 控制器及 BAY 映射、`occupied_bays`。允许 0–4 块 SATA：有意空置的盘位不计为缺盘；配置为在位却丢失、出现未登记硬盘或传感器归属不明会触发保护。进程启动时读取配置，修改后须受保护重启相关服务。存储源必须确实属于所显示的 NVMe，不要把多盘存储池当作单盘用量。
+随后按实机设置 PVE 节点、0–64 台受监控 VM（按 `vmids` 顺序优先展示）、NVMe 存储源、SATA 控制器及 BAY 映射、`occupied_bays`。允许 0–4 块 SATA：有意空置的盘位不计为缺盘；配置为在位却丢失、出现未登记硬盘或传感器归属不明会触发保护。进程启动时读取配置，修改后须受保护重启相关服务。存储源必须确实属于所显示的 NVMe，不要把多盘存储池当作单盘用量。
 
 在已有模块路径和校验值审核通过后，将其写入`/var/lib/r1-panel/driver.env`（权限0600），格式为两行`R1_IT87_MODULE=/绝对路径/it87.ko`与`R1_IT87_SHA256=审核后的64位摘要`；不要填示例路径或复制其他机器的模块。先将同一模块路径与校验值作为环境变量传给 `.venv/bin/python r1_doctor.py` 做只读预检；直接运行时不会自动执行 `driver.env`，systemd 则通过服务中的 `EnvironmentFile` 读取它。该命令不加载模块、不写 PWM/RGB，不替代现场验收。
 
@@ -200,7 +200,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 - 两路风扇转速读取与标准/静音双档曲线控制，全速模式 60 秒后回落到原档位
 - RGB 常亮 / 呼吸 / 彩虹 / 颜色，重启后总线重定位正常
 - Web 免登录脱敏双页、登录后管理、改密后旧会话失效
-- 当前源码的 192 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 验证
+- 当前源码的 226 项受防护离线测试（`.venv/bin/python -B run_offline_tests.py`），覆盖共享采集、数据失效、盘位映射、曲线降级及保存回退、Web 与渲染等逻辑；曲线编辑器异步交互另用 `node tests/test_curve_editor.cjs` 与 `node tests/test_rgb_controls.cjs` 验证；镜像按需取图与局部更新分别由 `node tests/test_mirror_polling.cjs`、`node tests/test_web_dom.cjs` 验证
 
 ### 尚未验证
 
@@ -242,7 +242,7 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 | `r1_svg_painter.py` / `r1_theme.py` | SVG 渲染与主题（Catppuccin Mocha / Latte） |
 | `r1_fan_curve.py` / `r1_fan_control_ipc.py` / `r1_fan_config.py` | 温控曲线、IPC、配置校验 |
 | `r1_rgb_control.py` / `r1_rgb_probe.py` | RGB 控制与定点探测 |
-| `r1_web.py` / `r1_web.html` / `r1_web_views.py` | HTTP/HTTPS 服务与共享画面渲染，PNG 复用已生成的 SVG |
+| `r1_web.py` / `r1_web.html` / `r1_web_views.py` / `r1_web_dom.py` | HTTP/HTTPS 服务与共享画面渲染，Web 内联 SVG 局部更新，兼容 SVG／PNG 按需生成 |
 | `r1_storage_usage.py` / `r1_web_capacity.py` | 旧模块兼容导出；实际查询位于 `r1_storage_queries.py`，不单独维护缓存 |
 | `r1_dsm_usage.sh` | DSM 端受限只读容量命令，与主机查询协议配套 |
 | `*.service` | systemd 服务定义 |
@@ -273,3 +273,13 @@ systemctl stop r1-web.service        # 只关 Web，前屏不受影响
 升级前备份运行代码、服务定义和本机配置（凭据另行安全保管，不上传）。对比发布文件清单，仅更新该版本需要的程序；不覆盖本机 site、存储 SSH、主题和曲线配置。先离线测试与只读预检，再安排独立自动回退和现场短测；涉及采集、温控或显示链路的变更，还需按发布验收计划完成持续观察与现场复核；各版实际验证范围见对应 Release。失败时恢复备份及服务配置，不重启 PVE 或修改虚拟机。历史版本的校验清单不可用于核验当前代码。
 
 原子替换、文件同步与运行状态有效期的边界见 [原子写语义说明](docs/atomic-writes.md)。
+
+控制页下部依次为风扇控制、灯光控制、虚拟机状态三张132px等高卡片（间距13px），虚拟机卡置于页面最下部，底部最多显示前三台配置 VM，状态小卡片固定 52px 高、按台数等宽铺满，超出三台用摘要显示；三个卡片右上角统一为状态圆点徽标，显示风扇模式、灯光模式及全部受监控 VM 的运行数／总数；灯光卡提供呼吸、常亮、关闭三按钮；沿用现有颜色和灯效授权，关闭状态不展示旧灯效。
+
+登录后的实体屏实时镜像默认折叠，展开后每5秒获取PNG，展开/切页/亮度变化立即刷新；收起或页面转入后台时停止取图，切页和亮度控制仍可直接使用。上方 Web 双页使用内联 SVG，固定布局仅挂载一次，每 15 秒以 JSON 局部更新数字、环弧、容量条和状态；失效或请求失败时隐藏旧画面。
+
+显示档位统一为「标准／静音／全速」，分别对应兼容 API/IPC 值 `high`／`low`／`full`；现有曲线配置名称不变。共享控制卡片的本轮实体触控验收仍待现场确认，详见 [Web说明](docs/web.md#本轮实体触控验收待现场确认)。
+
+风扇与灯光控制卡移除中部重复状态文案，状态统一由角标显示；两组三按钮均加高至52px，全速时角标显示“全速 · 51s”并自动加宽，卡片中部只显示返回档位提示；按钮配有简洁线条图标。
+
+虚拟机卡片底部以三个100×52px状态栏横向等分展示VM编号、状态圆点与文字；这些栏仅显示状态，不是控制按钮。

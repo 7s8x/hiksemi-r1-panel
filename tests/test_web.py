@@ -26,6 +26,23 @@ from ui_preview import preview_web_source  # noqa: E402
 
 
 class WebTests(unittest.TestCase):
+    def test_temperature_units_share_numeric_baseline(self):
+        from ui_preview import demo_data
+        for theme in ('mocha', 'latte'):
+            root = ElementTree.fromstring(render_information(demo_data(), theme=theme))
+            temperatures = [node for node in root.iter()
+                            if node.tag.endswith('text') and any(span.text == '°C' for span in node)]
+            self.assertEqual(len(temperatures), 6)
+            self.assertEqual(temperatures[0].get('y'), '197')
+            for node in temperatures:
+                self.assertIsNone(node.get('dominant-baseline'))
+                self.assertEqual(node.get('font-size'), '39')
+                self.assertEqual(node.get('text-anchor'), 'end')
+                unit = next(span for span in node if span.text == '°C')
+                self.assertEqual(unit.get('font-size'), '17')
+                self.assertIsNone(unit.get('dominant-baseline'))
+                self.assertIsNone(unit.get('dy'))
+
     def setUp(self):
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -81,10 +98,11 @@ class WebTests(unittest.TestCase):
         self.assertEqual(rasterize.call_count, 0)
         self.assertNotIn('panel', result)
         self.assertNotIn('fans', result)
-        self.assertIn(b"<svg", result["panel_svg"])
-        self.assertIn(b"<svg", result["fans_svg"])
-        self.assertIn(b"height=\"633\"", result["panel_svg"])
-        self.assertNotIn("虚拟机状态".encode(), result["panel_svg"])
+        self.assertNotIn('panel_svg', result)
+        self.assertNotIn('fans_svg', result)
+        self.assertIn('panel', result['values'])
+        self.assertIn('fans', result['values'])
+
 
     def test_web_views_escape_models_and_keep_fan_ring_semantics(self):
         data = {
@@ -111,9 +129,9 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("1TB · 940GB 可用", panel)
         data["storage"].append((("2TB", "SSD", "****"), 39))
         self.assertIn("BAY 1 · 2TB SSD", render_information(data).decode("utf-8"))
-        self.assertIn("VM 100", panel)
-        self.assertIn("VM 100", web_panel)
-        self.assertIn("运行中", web_panel)
+        self.assertNotIn("VM 100", panel)
+        self.assertIn("VM 100", fans)
+        self.assertIn("运行中", fans)
         self.assertNotIn("虚拟机状态", web_panel)
         self.assertIn('height="197"', web_panel)
         self.assertIn('height="633"', web_panel)
@@ -121,41 +139,40 @@ class WebTests(unittest.TestCase):
         self.assertIn('>存储</text>', web_panel)
         self.assertNotIn('>存储硬盘', web_panel)
         self.assertIn('cx="94" cy="209" r="58"', web_panel)
-        self.assertIn('x="329" y="251"', web_panel)
-        self.assertIn('x="329" y="269"', web_panel)
-        self.assertIn('font-size="39" font-weight="700" dominant-baseline="middle" text-anchor="end">56', web_panel)
+        self.assertIn('x="329" y="250"', web_panel)
+        self.assertNotIn('x="329" y="269"', web_panel)
+        self.assertIn('font-size="39" font-weight="700" text-anchor="end">56', web_panel)
         self.assertNotIn("Synology", panel)
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
         self.assertNotIn("环形进度按 PWM 输出比例绘制", fans)
         for label in ("全速", "标准", "静音"):
             self.assertIn(label, fans)
-        self.assertIn("标准模式", fans)
-        self.assertIn("打开灯光", fans)
-        self.assertIn("关闭灯光", fans)
-        self.assertIn("灯光已关闭", fans)
-        self.assertIn("温控依据", fans)
-        self.assertIn("BAY 1–4 最高", fans)
-        self.assertLess(fans.index("温控依据"), fans.index("风扇控制"))
+        self.assertIn("标准", fans)
+        self.assertIn("呼吸", fans)
+        self.assertIn("常亮", fans)
+        self.assertIn("关闭", fans)
+        self.assertNotIn("温控依据", fans)
+        self.assertNotIn("硬盘最高 ", fans)
         self.assertLess(fans.index("风扇控制"), fans.index("灯光控制"))
-        self.assertIn("65°C", fans)
-        self.assertIn("39°C", fans)
+        self.assertNotIn("65°C", fans)
+        self.assertNotIn("39°C", fans)
         self.assertNotIn("温度与灯光", fans)
         self.assertNotIn("{{", panel + fans)
         fan_text = ElementTree.fromstring(fans).findall(".//{http://www.w3.org/2000/svg}text")
         self.assertTrue(any(node.attrib.get("x") == "94" and node.text == "47%" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "995" for node in fan_text))
         self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "RPM" for node in fan_text))
-        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "高速" for node in fan_text))
+        self.assertTrue(any(node.attrib.get("x") == "329" and node.text == "标准" for node in fan_text))
         self.assertNotIn("实际转速", fans)
         self.assertNotIn("风扇状态", fans)
         web_fans = render_fans(data, web_layout=True).decode("utf-8")
-        self.assertIn("控制模式", web_fans)
-        self.assertIn("机身 RGB", web_fans)
+        self.assertNotIn("控制模式", web_fans)
+        self.assertIn(">关闭</text>", web_fans)
         self.assertNotIn("独立温控服务", web_fans)
-        self.assertIn("根据温度自动调节风量", web_fans)
+        self.assertNotIn("根据温度自动调节风量", web_fans)
         data["control"] = {"live": True, "desired": "full", "mode": "full", "remaining": 45}
-        self.assertIn("全速散热 · 剩余 45 秒", render_fans(data, web_layout=True).decode("utf-8"))
+        self.assertIn("全速 · 45s", render_fans(data, web_layout=True).decode("utf-8"))
         self.assertIn(">全速</text>", render_fans(data).decode("utf-8"))
         data["fan_basis"] = (65, 39, 3)
         self.assertNotIn("39°C", render_fans(data).decode("utf-8"))
@@ -491,16 +508,16 @@ class LogTests(unittest.TestCase):
             self.assertFalse(log_path.exists())
 
     def test_controller_labels_keep_offline_switching_full_and_unknown_semantics(self):
-        cases = [({'live': False}, '温控服务离线'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'full'}, '正在切换模式'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速散热 · 剩余 0 秒'),
-                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '全速散热'),
-                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准模式'),
-                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音模式'),
-                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准模式'),
-                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '曲线状态未知'),
-                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '曲线状态未知'),
-                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '曲线状态未知')]
+        cases = [({'live': False}, '离线'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'full'}, '切换中'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full', 'remaining': 0}, '全速 · 0s'),
+                 ({'live': True, 'mode': 'full', 'desired': 'full'}, '结束后返回原档位'),
+                 ({'live': True, 'mode': 'high', 'desired': 'high'}, '标准'),
+                 ({'live': True, 'mode': 'low', 'desired': 'low'}, '静音'),
+                 ({'live': True, 'mode': 'auto', 'desired': 'auto'}, '标准'),
+                 ({'live': True, 'mode': 'unknown', 'desired': 'unknown'}, '未知'),
+                 ({'live': True, 'mode': 'offline', 'desired': 'offline'}, '未知'),
+                 ({'live': True, 'mode': 'switching', 'desired': 'switching'}, '未知')]
         for control, expected in cases:
             with self.subTest(control=control):
                 self.assertIn(expected.encode(), render_fans({'control': control}))

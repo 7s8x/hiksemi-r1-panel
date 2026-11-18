@@ -46,15 +46,15 @@ class GestureTests(unittest.TestCase):
         self.assertEqual(gesture((170, 400), (175, 404)), [("tap", (175, 404))])
 
     def test_fan_buttons_only_accept_taps_inside_their_bounds(self):
-        self.assertEqual(fan_button_mode((80, 760)), "full")
-        self.assertEqual(fan_button_mode((188, 760)), "high")
-        self.assertEqual(fan_button_mode((294, 760)), "low")
-        self.assertIsNone(fan_button_mode((135, 760)))
-        self.assertIsNone(fan_button_mode((241, 760)))
+        self.assertEqual(fan_button_mode((80, 622)), "full")
+        self.assertEqual(fan_button_mode((188, 622)), "high")
+        self.assertEqual(fan_button_mode((294, 622)), "low")
+        self.assertIsNone(fan_button_mode((135, 622)))
+        self.assertIsNone(fan_button_mode((241, 622)))
         self.assertIsNone(fan_button_mode((80, 720)))
-        self.assertEqual(rgb_button_action((100, 905)), "on")
-        self.assertEqual(rgb_button_action((250, 905)), "off")
-        self.assertIsNone(rgb_button_action((188, 905)))
+        self.assertEqual(rgb_button_action((100, 770)), "breathe")
+        self.assertEqual(rgb_button_action((250, 770)), "off")
+        self.assertEqual(rgb_button_action((188, 770)), "steady")
 
     def test_diagonal_drag_does_not_switch_view(self):
         self.assertEqual(gesture((80, 350), (230, 470)), [])

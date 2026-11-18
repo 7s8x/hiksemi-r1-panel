@@ -3,6 +3,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 import time
+import json
+
+from r1_web_dom import document_layout, project
+from r1_web_views import information_values, fan_values
 
 from r1_web_views import render_information, render_fans
 
@@ -26,7 +30,7 @@ def demo_data():
         "storage_capacity": [(60*10**9, 940*10**9, 6), (80*10**9, 1920*10**9, 4),
                              (770*10**9, 230*10**9, 77), (3480*10**9, 520*10**9, 87),
                              (1600*10**9, 2400*10**9, 40)],
-        "vms": [("VM 100", "RUNNING"), ("VM 111", "RUNNING")],
+        "vms": [("VM 100", "RUNNING"), ("VM 111", "RUNNING"), ("VM 200", "RUNNING")],
         "fans": {"fan2_input": 1464, "fan3_input": 3994, "pwm2": 184, "pwm3": 184},
         "control": {"live": True, "mode": "high", "desired": "high"},
         "fan_basis": (65, 39, 4), "rgb": False,
@@ -48,6 +52,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400); return
         if parsed.path in ("/panel.svg", "/fans.svg"):
             payload = demo_svg(parsed.path[1:-4], theme); mime = "image/svg+xml"
+        elif parsed.path == "/web":
+            payload = preview_web_source().replace("'/api/theme'", "'/api/theme?theme=" + theme + "'").replace("'/public/state.json'", "'/public/state.json?theme=" + theme + "'").replace("'/public/layout.json'", "'/public/layout.json?theme=" + theme + "'").encode()
+            mime = "text/html; charset=utf-8"
+        elif parsed.path in ("/public/state.json", "/public/layout.json", "/api/theme"):
+            spec = document_layout(theme)
+            data = ({'theme': theme} if parsed.path == '/api/theme' else spec
+                    if parsed.path.endswith('layout.json') else
+                    {'id': spec['id'], 'theme': theme, 'valid_for': 30,
+                     'pages': {'panel': project('panel', information_values(demo_data()), theme),
+                               'fans': project('fans', fan_values(demo_data()), theme)}})
+            payload = json.dumps(data).encode(); mime = 'application/json'
         elif parsed.path == "/":
             payload = ("<!doctype html><meta charset=utf-8><title>R1 当前布局预览</title>"
                        "<style>body{background:#313244;color:#cdd6f4;font:16px sans-serif}a{color:#89dceb}"

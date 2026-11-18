@@ -19,7 +19,7 @@
     <text x="171" y="202" fill="#9bb1be" font-size="13" dominant-baseline="middle">转速</text>
     <text x="329" y="174" fill="#9bb1be" font-size="11" text-anchor="end">{{F2_RPM_UNIT}}</text>
     <text x="329" y="213" fill="{{F2_RPM_COLOR}}" font-size="{{F2_RPM_FONT}}" font-weight="700" text-anchor="end">{{F2_RPM}}</text>
-    <line x1="158" y1="227" x2="344" y2="227" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <line x1="171" y1="227" x2="344" y2="227" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="249" fill="#9bb1be" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="257" fill="{{F2_STATUS_COLOR}}" font-size="17" text-anchor="end">{{F2_STATUS}}</text>
 
@@ -33,38 +33,97 @@
     <text x="171" y="413" fill="#9bb1be" font-size="13" dominant-baseline="middle">转速</text>
     <text x="329" y="385" fill="#9bb1be" font-size="11" text-anchor="end">{{F3_RPM_UNIT}}</text>
     <text x="329" y="424" fill="{{F3_RPM_COLOR}}" font-size="{{F3_RPM_FONT}}" font-weight="700" text-anchor="end">{{F3_RPM}}</text>
-    <line x1="158" y1="438" x2="344" y2="438" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <line x1="171" y1="438" x2="344" y2="438" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="460" fill="#9bb1be" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="468" fill="{{F3_STATUS_COLOR}}" font-size="17" text-anchor="end">{{F3_STATUS}}</text>
 
-    <rect x="16" y="521" width="344" height="134" rx="7" fill="#15232e" stroke="#2a4050"/>
-    <text x="32" y="547" fill="#edf6f8" font-size="16" font-weight="700">温控依据</text>
-    <text x="344" y="546" fill="#9bb1be" font-size="11" text-anchor="end">独立温控读数</text>
-    <text x="32" y="580" fill="#9bb1be" font-size="13" dominant-baseline="middle">CPU 最高温度</text>
-    <text x="344" y="588" fill="{{BASIS_CPU_COLOR}}" font-size="26" font-weight="700" text-anchor="end">{{BASIS_CPU_TEMP}}</text>
-    <line x1="32" y1="597" x2="344" y2="597" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
-    <text x="32" y="622" fill="#9bb1be" font-size="13" dominant-baseline="middle">BAY 1–4 最高</text>
-    <text x="344" y="630" fill="{{BASIS_DRIVE_COLOR}}" font-size="26" font-weight="700" text-anchor="end">{{BASIS_DRIVE_TEMP}}</text>
+    <rect x="16" y="521" width="344" height="132" rx="7" fill="#15232e" stroke="#2a4050"/>
+    <text x="32" y="547" fill="#edf6f8" font-size="16" font-weight="700">风扇控制</text>
+    <rect x="{{FAN_BADGE_X}}" y="534" width="{{FAN_BADGE_WIDTH}}" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <circle cx="{{FAN_BADGE_DOT_X}}" cy="545.5" r="3.5" fill="{{FAN_BADGE_COLOR}}"/>
+    <text x="{{FAN_BADGE_TEXT_X}}" y="550" fill="{{FAN_BADGE_COLOR}}" font-size="12" font-weight="600">{{FAN_BADGE_TEXT}}</text>
+    <text x="188" y="577" fill="{{CONTROL_COLOR}}" font-size="12" text-anchor="middle">{{FULL_BUTTON_DETAIL}}</text>
+    <rect x="32" y="588" width="100" height="52" rx="5" fill="{{FULL_BUTTON_BG}}"/>
+    <line x1="63" y1="607" x2="57" y2="615" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="57" y1="615" x2="61" y2="615" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="61" y1="615" x2="59" y2="622" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="59" y1="622" x2="66" y2="613" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="66" y1="613" x2="62" y2="613" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="62" y1="613" x2="63" y2="607" stroke="{{FULL_BUTTON_FG}}" stroke-width="1.5"/>
+    <text x="94" y="620" fill="{{FULL_BUTTON_FG}}" font-size="14" font-weight="700" text-anchor="middle">全速</text>
+    <rect x="138" y="588" width="100" height="52" rx="5" fill="{{HIGH_BUTTON_BG}}"/>
+    <line x1="164" y1="617" x2="165" y2="613" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="165" y1="613" x2="168" y2="610" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="168" y1="610" x2="172" y2="610" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="172" y1="610" x2="176" y2="613" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="176" y1="613" x2="177" y2="617" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="167" y1="620" x2="174" y2="620" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="171" y1="616" x2="174" y2="612" stroke="{{HIGH_BUTTON_FG}}" stroke-width="1.5"/>
+    <text x="200" y="620" fill="{{HIGH_BUTTON_FG}}" font-size="14" font-weight="700" text-anchor="middle">标准</text>
+    <rect x="244" y="588" width="100" height="52" rx="5" fill="{{LOW_BUTTON_BG}}"/>
+    <line x1="279" y1="608" x2="275" y2="609" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="275" y1="609" x2="272" y2="612" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="272" y1="612" x2="272" y2="616" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="272" y1="616" x2="275" y2="620" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="275" y1="620" x2="279" y2="621" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="279" y1="621" x2="283" y2="619" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="283" y1="619" x2="279" y2="619" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="279" y1="619" x2="276" y2="616" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="276" y1="616" x2="276" y2="612" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="276" y1="612" x2="279" y2="608" stroke="{{LOW_BUTTON_FG}}" stroke-width="1.5"/>
+    <text x="306" y="620" fill="{{LOW_BUTTON_FG}}" font-size="14" font-weight="700" text-anchor="middle">静音</text>
 
-    <rect x="16" y="665" width="344" height="134" rx="7" fill="#15232e" stroke="#2a4050"/>
-    <text x="32" y="691" fill="#edf6f8" font-size="16" font-weight="700">风扇控制</text>
-    <text x="344" y="690" fill="#9bb1be" font-size="12" text-anchor="end">控制模式</text>
-    <text x="32" y="714" fill="{{CONTROL_COLOR}}" font-size="18" font-weight="700">{{CONTROL_STATUS}}</text>
-    <text x="32" y="732" fill="#9bb1be" font-size="11">{{CONTROL_DETAIL}}</text>
-    <rect x="32" y="738" width="100" height="45" rx="5" fill="{{FULL_BUTTON_BG}}"/>
-    <text x="82" y="766" fill="{{FULL_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">全速</text>
-    <rect x="138" y="738" width="100" height="45" rx="5" fill="{{HIGH_BUTTON_BG}}"/>
-    <text x="188" y="766" fill="{{HIGH_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">标准</text>
-    <rect x="244" y="738" width="100" height="45" rx="5" fill="{{LOW_BUTTON_BG}}"/>
-    <text x="294" y="766" fill="{{LOW_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">静音</text>
+    <rect x="16" y="666" width="344" height="132" rx="7" fill="#15232e" stroke="#2a4050"/>
+    <text x="32" y="692" fill="#edf6f8" font-size="16" font-weight="700">灯光控制</text>
+    <rect x="279" y="679" width="65" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <circle cx="292" cy="690.5" r="3.5" fill="{{RGB_INDICATOR}}"/>
+    <text x="305" y="695" fill="{{RGB_BADGE_COLOR}}" font-size="12" font-weight="600">{{RGB_BADGE_TEXT}}</text>
+    <rect x="32" y="733" width="100" height="52" rx="5" fill="{{RGB_BREATHE_BG}}"/>
+    <line x1="54" y1="757" x2="57" y2="755" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="57" y1="755" x2="60" y2="755" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="60" y1="755" x2="63" y2="757" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="63" y1="757" x2="66" y2="757" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="66" y1="757" x2="69" y2="755" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="54" y1="762" x2="57" y2="760" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="57" y1="760" x2="60" y2="760" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="60" y1="760" x2="63" y2="762" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="63" y1="762" x2="66" y2="762" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <line x1="66" y1="762" x2="69" y2="760" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
+    <text x="94" y="765" fill="{{RGB_BREATHE_FG}}" font-size="14" font-weight="700" text-anchor="middle">呼吸</text>
+    <rect x="138" y="733" width="100" height="52" rx="5" fill="{{RGB_STEADY_BG}}"/>
+    <circle cx="171" cy="759" r="4" fill="none" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="171" y1="749" x2="171" y2="752" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="171" y1="766" x2="171" y2="769" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="161" y1="759" x2="164" y2="759" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="178" y1="759" x2="181" y2="759" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="164" y1="752" x2="166" y2="754" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="176" y1="764" x2="178" y2="766" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="164" y1="766" x2="166" y2="764" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <line x1="176" y1="754" x2="178" y2="752" stroke="{{RGB_STEADY_FG}}" stroke-width="1.5"/>
+    <text x="200" y="765" fill="{{RGB_STEADY_FG}}" font-size="14" font-weight="700" text-anchor="middle">常亮</text>
+    <rect x="244" y="733" width="100" height="52" rx="5" fill="{{RGB_OFF_BUTTON_BG}}"/>
+    <circle cx="277" cy="759" r="7" fill="none" stroke="{{RGB_OFF_BUTTON_FG}}" stroke-width="1.5"/>
+    <line x1="272" y1="754" x2="282" y2="764" stroke="{{RGB_OFF_BUTTON_FG}}" stroke-width="1.5"/>
+    <text x="306" y="765" fill="{{RGB_OFF_BUTTON_FG}}" font-size="14" font-weight="700" text-anchor="middle">关闭</text>
+    <rect x="16" y="811" width="344" height="132" rx="7" fill="#15232e" stroke="#2a4050"/>
+    <text x="32" y="837" fill="#edf6f8" font-size="16" font-weight="700">虚拟机状态</text>
+    <rect x="{{VM_BADGE_X}}" y="824" width="{{VM_BADGE_WIDTH}}" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
+    <circle cx="{{VM_BADGE_DOT_X}}" cy="835.5" r="3.5" fill="{{VM_BADGE_COLOR}}"/>
+    <text x="{{VM_BADGE_TEXT_X}}" y="840" fill="{{VM_BADGE_COLOR}}" font-size="12" font-weight="600">{{VM_BADGE_TEXT}}</text>
+    <text x="188" y="883" fill="#9bb1be" font-size="14" text-anchor="middle">{{VM_EMPTY_TEXT}}</text>
+    <text x="32" y="866" fill="#9bb1be" font-size="12">{{VM_SUMMARY}}</text>
+    <rect x="{{VM0_X}}" y="878" width="{{VM0_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM0_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM0_VISIBLE}}"/>
+    <text x="{{VM0_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM0_NAME}}</text>
+    <circle cx="{{VM0_DOT_X}}" cy="916" r="3" fill="{{VM0_COLOR}}" fill-opacity="{{VM0_VISIBLE}}"/>
+    <text x="{{VM0_STATUS_X}}" y="920" fill="{{VM0_COLOR}}" font-size="12" text-anchor="middle">{{VM0_STATUS}}</text>
+    <rect x="{{VM1_X}}" y="878" width="{{VM1_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM1_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM1_VISIBLE}}"/>
+    <text x="{{VM1_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM1_NAME}}</text>
+    <circle cx="{{VM1_DOT_X}}" cy="916" r="3" fill="{{VM1_COLOR}}" fill-opacity="{{VM1_VISIBLE}}"/>
+    <text x="{{VM1_STATUS_X}}" y="920" fill="{{VM1_COLOR}}" font-size="12" text-anchor="middle">{{VM1_STATUS}}</text>
+    <rect x="{{VM2_X}}" y="878" width="{{VM2_WIDTH}}" height="52" rx="5" fill="#244354" fill-opacity="{{VM2_VISIBLE}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{VM2_VISIBLE}}"/>
+    <text x="{{VM2_CENTER}}" y="899" fill="#edf6f8" font-size="13" font-weight="600" text-anchor="middle">{{VM2_NAME}}</text>
+    <circle cx="{{VM2_DOT_X}}" cy="916" r="3" fill="{{VM2_COLOR}}" fill-opacity="{{VM2_VISIBLE}}"/>
+    <text x="{{VM2_STATUS_X}}" y="920" fill="{{VM2_COLOR}}" font-size="12" text-anchor="middle">{{VM2_STATUS}}</text>
 
-    <rect x="16" y="809" width="344" height="134" rx="7" fill="#15232e" stroke="#2a4050"/>
-    <text x="32" y="835" fill="#edf6f8" font-size="16" font-weight="700">灯光控制</text>
-    <text x="344" y="835" fill="#9bb1be" font-size="12" text-anchor="end">机身 RGB</text>
-    <text x="32" y="867" fill="{{RGB_COLOR}}" font-size="19" font-weight="700">{{RGB_STATUS}}</text>
-    <rect x="32" y="882" width="148" height="45" rx="5" fill="{{RGB_ON_BUTTON_BG}}"/>
-    <text x="106" y="910" fill="{{RGB_ON_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">打开灯光</text>
-    <rect x="196" y="882" width="148" height="45" rx="5" fill="{{RGB_OFF_BUTTON_BG}}"/>
-    <text x="270" y="910" fill="{{RGB_OFF_BUTTON_FG}}" font-size="15" font-weight="700" text-anchor="middle">关闭灯光</text>
   </g>
 </svg>

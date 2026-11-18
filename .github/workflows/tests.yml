@@ -31,7 +31,11 @@ jobs:
         run: python -I -S -B run_offline_tests.py
 
       - name: 曲线编辑器异步回执与切档回归
-        run: node tests/test_curve_editor.cjs
+        run: |
+          node tests/test_curve_editor.cjs
+          node tests/test_rgb_controls.cjs
+          node tests/test_mirror_polling.cjs
+          node tests/test_web_dom.cjs
 
       - name: 检出已验证的渲染基线
         uses: actions/checkout@v4
@@ -63,3 +67,6 @@ jobs:
           sha256sum --check SHA256SUMS.txt
           python -I -S -B run_offline_tests.py
           node tests/test_curve_editor.cjs
+          node tests/test_rgb_controls.cjs
+          node tests/test_mirror_polling.cjs
+          node tests/test_web_dom.cjs

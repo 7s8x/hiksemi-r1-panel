@@ -40,9 +40,9 @@ def load_site(path=None):
         return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value)
     if not identifier(node):
         raise ValueError("invalid PVE node")
-    if (not isinstance(vmids, (list, tuple)) or not 0 <= len(vmids) <= 2 or
+    if (not isinstance(vmids, (list, tuple)) or len(vmids) > 64 or
             any(type(v) is not int or not 100 <= v <= 999999 for v in vmids) or len(set(vmids)) != len(vmids)):
-        raise ValueError("configure at most two distinct VM IDs")
+        raise ValueError("configure at most 64 distinct VM IDs")
     if (not isinstance(stores, (list, tuple)) or not 1 <= len(stores) <= 8 or
             any(not identifier(s) for s in stores) or len(set(stores)) != len(stores)):
         raise ValueError("invalid storage sources")

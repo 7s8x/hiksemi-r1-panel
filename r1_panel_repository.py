@@ -114,6 +114,27 @@ def rgb_status():
         return None
 
 
+def apply_rgb_state(value, current=None):
+    """Shared authorization path for IPC edits and physical effect buttons."""
+    current = RGB.read_state() if current is None else current
+    if value[0] in (1, 3) or tuple(value[1:]) != current[1:]:
+        if not Path("/var/lib/r1-web/rgb-verified").exists():
+            raise ValueError("color and effect modes await visual verification")
+    try:
+        actual = RGB.set_state(*value)
+    except (OSError, RuntimeError, ValueError):
+        remember_rgb_state(None)
+        raise
+    remember_rgb_state(actual)
+    return actual
+
+
+def select_rgb_effect(action):
+    mode = {"breathe": 3, "steady": 1, "off": 0}[action]
+    current = RGB.read_state()
+    return apply_rgb_state((mode, *current[1:]), current)
+
+
 def stop(_signum, _frame):
     global STOP
     STOP = True
@@ -212,11 +233,39 @@ def framebuffer_info(fd):
     return line_length
 
 
+def _input_capability_bits(path):
+    """Decode Linux sysfs bitmaps: high native unsigned-long word first."""
+    words = read_text(path).split()
+    if not words:
+        raise ValueError("missing input capabilities")
+    word_bits = struct.calcsize("L") * 8
+    values = [int(word, 16) for word in reversed(words)]
+    if any(value < 0 or value >= 1 << word_bits for value in values):
+        raise ValueError("invalid input capability word")
+    return sum(value << (index * word_bits) for index, value in enumerate(values))
+
+
 def touchscreen_path():
+    candidates = []
     for path in glob.glob("/sys/class/input/event*"):
-        if read_text(path + "/device/name") == "CST0836:00 0911:5288":
-            return "/dev/input/" + Path(path).name
-    raise RuntimeError("R1 touchscreen was not found")
+        device = Path(path) / "device"
+        if read_text(device / "name") != "CST0836:00 0911:5288":
+            continue
+        try:
+            events = _input_capability_bits(device / "capabilities/ev")
+            keys = _input_capability_bits(device / "capabilities/key")
+            axes = _input_capability_bits(device / "capabilities/abs")
+        except ValueError:
+            continue  # Missing/disappearing or malformed devices are not safe candidates.
+        absolute_xy = axes & 3 == 3
+        multitouch_xy = axes & (3 << 0x35) == 3 << 0x35
+        if events & 0x0a == 0x0a and keys & (1 << 0x14a) and (absolute_xy or multitouch_xy):
+            candidates.append("/dev/input/" + Path(path).name)
+    if not candidates:
+        raise RuntimeError("R1 touchscreen was not found (absolute touch capabilities required)")
+    if len(candidates) != 1:
+        raise RuntimeError("R1 touchscreen is ambiguous: " + ", ".join(sorted(candidates)))
+    return candidates[0]
 
 
 class TouchGesture:
@@ -307,7 +356,7 @@ def shifted_state(current, horizontal_delta):
 def fan_button_mode(point):
     """Three control buttons share the row; gaps between them stay inert."""
     x, y = point
-    if 738 <= y <= 783:
+    if 588 <= y <= 640:
         if 32 <= x <= 132:
             return "full"
         if 138 <= x <= 238:
@@ -319,10 +368,12 @@ def fan_button_mode(point):
 
 def rgb_button_action(point):
     x, y = point
-    if 882 <= y <= 927:
-        if 32 <= x <= 180:
-            return "on"
-        if 196 <= x <= 344:
+    if 733 <= y <= 785:
+        if 32 <= x <= 132:
+            return "breathe"
+        if 138 <= x <= 238:
+            return "steady"
+        if 244 <= x <= 344:
             return "off"
     return None
 
@@ -376,6 +427,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                 if target == "fans":
                     data["control"] = control_status()
                     data["rgb"] = rgb_status()
+                    data["rgb_state"] = _RGB_CACHE if data["rgb"] is not None else None
                 display_refresh.refresh(painter, data, target, blit, force=force, metrics=metrics)
                 # getty may re-enable its cursor between refreshes. Reassert even
                 # on a content-cache hit; skipping rasterization must not skip this.
@@ -455,10 +507,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     mode = fan_button_mode(value) if state == "fans" else None
                     rgb_action = rgb_button_action(value) if state == "fans" else None
                     if rgb_action is not None:
-                        enabled = RGB.status()
-                        if enabled != (rgb_action == "on"):
-                            enabled = RGB.toggle()
-                        remember_rgb_state(None)
+                        select_rgb_effect(rgb_action)
                         refresh()
                         next_refresh = time.monotonic() + 1
                     elif mode is not None:
@@ -486,12 +535,7 @@ def run_touch(painter, initial_view="panel", metrics=None):
                     if state in ("panel", "fans"):
                         refresh()
                 elif action == "rgb":
-                    current = RGB.read_state()
-                    if value[0] in (1, 3) or tuple(value[1:]) != current[1:]:
-                        if not Path("/var/lib/r1-web/rgb-verified").exists():
-                            raise ValueError("color and effect modes await visual verification")
-                    actual = RGB.set_state(*value)
-                    remember_rgb_state(actual)
+                    actual = apply_rgb_state(value)
                     if state == "fans":
                         refresh()
                     return {"ok": True, "state": state, "rgb": actual}
