@@ -12,6 +12,28 @@ import r1_vm_status as vm
 
 
 class CollectionOptimizationTests(unittest.TestCase):
+    def test_vm_inventory_and_selection_are_independent(self):
+        import r1_collection as shared
+        from tempfile import TemporaryDirectory
+        with patch.object(shared, 'vm_inventory', return_value={100:"RUNNING", 111:"RUNNING", 200:"STOPPED"}) as query:
+            payload = shared.collect_slow('vm', ())
+        query.assert_called_once_with()
+        record = {'schema': 1, 'boot': 'test', 'published_at': 100, 'groups': {
+            'vm': {'valid': True, 'at': 100, 'interval': 60, 'data': json.loads(json.dumps(payload))}}}
+        with TemporaryDirectory() as tmp:
+            selection = Path(tmp) / 'vm-monitor.json'
+            with patch.object(vm, 'SELECTION_FILE', selection):
+                selection.write_text('{"vmids":[100,200]}')
+                data = shared.decode_snapshot(record, now=100, boot='test')
+                self.assertEqual(data['vm_inventory'], [100, 111, 200])
+                self.assertEqual(data['vms'], [('VM 100','RUNNING'), ('VM 200','STOPPED')])
+                record['groups']['vm']['valid'] = False
+                data = shared.decode_snapshot(record, now=100, boot='test')
+                self.assertNotIn('vm_inventory', data)
+                self.assertEqual(data['vms'], [('VM 100','UNKNOWN'), ('VM 200','UNKNOWN')])
+                selection.write_text('{"vmids":[]}')
+                self.assertEqual(shared.decode_snapshot(record, now=100, boot='test')['vms'], [])
+
     def test_batch_vm_ids_order_and_paused_guest_meaning(self):
         records = [{"vmid": 111, "status": "running", "qmpstatus": "paused"},
                    {"vmid": 101, "status": "stopped"},

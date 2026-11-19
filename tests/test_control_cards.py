@@ -158,14 +158,21 @@ class ControlCardTests(unittest.TestCase):
                     self.assertIn(label.encode(),svg)
                     root=ET.fromstring(svg)
                     dot=next(n for n in root.findall('.//s:circle',NS) if n.get('cy')=='690.5')
-                    if mode in (1,3):self.assertEqual(dot.get('fill'),'#1153db')
-                    self.assertFalse(any(n.get('cy')=='720' for n in root.findall('.//s:circle',NS)))
+                    badge=next(n for n in root.findall('.//s:text',NS) if n.get('y')=='695')
+                    swatch=next(n for n in root.findall('.//s:rect',NS) if n.get('y')=='707')
+                    self.assertEqual(dot.get('fill'),badge.get('fill'))
+                    visible=mode in (1,3)
+                    self.assertEqual(swatch.get('fill'),'#1153db' if visible else 'none')
+                    self.assertEqual(swatch.get('fill-opacity'),'1' if visible else '0')
+                    self.assertEqual(swatch.get('stroke-opacity'),'1' if visible else '0')
+                    self.assertEqual(b'#1153DB' in svg,visible)
 
 
     def test_unknown_rgb_has_no_fake_color_or_selected_effect(self):
         data=self.data();data.update(rgb=None,rgb_state=[3,'bad',0,0])
         svg=render_fans(data,theme='mocha')
         self.assertIn('>未知</text>'.encode(),svg)
+        self.assertNotIn(b'#1153DB',svg)
         root=ET.fromstring(svg)
         buttons=[n for n in root.findall('.//s:rect',NS) if n.get('y')=='733']
         self.assertEqual(len({n.get('fill') for n in buttons}),1)

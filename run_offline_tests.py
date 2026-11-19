@@ -66,8 +66,11 @@ def guard(event, args):
 
 if __name__ == "__main__":
     sys.addaudithook(guard)
-    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"))
-    result = unittest.TextTestRunner(verbosity=1).run(suite)
+    import r1_vm_status
+    with tempfile.TemporaryDirectory() as directory:
+        r1_vm_status.SELECTION_FILE = Path(directory) / "vm-monitor.json"
+        suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"))
+        result = unittest.TextTestRunner(verbosity=1).run(suite)
     if violations:
         print("offline_guard_violations=" + str(len(violations)), file=sys.stderr)
         from collections import Counter

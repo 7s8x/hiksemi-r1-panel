@@ -13,6 +13,7 @@ import time
 
 from r1_site_config import SITE
 from r1_snapshot import empty_display, FAST_FIELDS
+from r1_vm_status import selected_vmids, valid_vm_id, vm_inventory
 
 SNAPSHOT = Path('/run/r1-collector/snapshot.json')
 INTERVALS = {'fast': 5, 'vm': 60, 'nvme': 300, 'dsm': 1800, 'identity': 300}
@@ -50,14 +51,18 @@ def decode_snapshot(record, *, now, boot):
     if valid['fast']:
         data.update({k: fast['data'][k] for k in FAST_FIELDS if k in fast['data']})
         data['captured_at'] = fast['at']
+    vmids = selected_vmids(SITE.vmids)
+    statuses = {}
     if valid['vm']:
-        rows = groups['vm']['data'].get('vms', [])
-        statuses = {}
+        vm_data = groups['vm']['data']
+        rows = vm_data.get('vms', [])
         for row in rows if isinstance(rows, list) else []:
-            if (isinstance(row, list) and len(row) == 2 and type(row[0]) is int
-                    and row[0] in SITE.vmids and row[1] in ('RUNNING', 'STOPPED', 'UNKNOWN')):
+            if (isinstance(row, list) and len(row) == 2 and valid_vm_id(row[0])
+                    and row[1] in ('RUNNING', 'STOPPED', 'UNKNOWN')):
                 statuses[row[0]] = row[1] if row[0] not in statuses else 'UNKNOWN'
-        data['vms'] = [(f'VM {v}', statuses.get(v, 'UNKNOWN')) for v in SITE.vmids]
+        if vm_data.get('inventory') is True:
+            data['vm_inventory'] = sorted(statuses)
+    data['vms'] = [(f'VM {v}', statuses.get(v, 'UNKNOWN')) for v in vmids]
     if valid['identity']:
         for k in ('pve_version', 'cpu_model'):
             value = groups['identity']['data'].get(k)
@@ -147,8 +152,10 @@ def collect_fast():
 
 def collect_slow(key, disks):
     if key == 'vm':
-        from r1_vm_status import vm_statuses
-        return {'vms': list(vm_statuses().items())}
+        inventory = vm_inventory()
+        if inventory is None:
+            raise RuntimeError('VM inventory unavailable')
+        return {'vms': list(inventory.items()), 'inventory': True}
     if key == 'identity':
         from r1_host_sampling import system_identity
         version, cpu = system_identity()

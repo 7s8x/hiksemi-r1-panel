@@ -76,8 +76,10 @@
     <rect x="16" y="666" width="344" height="132" rx="7" fill="#15232e" stroke="#2a4050"/>
     <text x="32" y="692" fill="#edf6f8" font-size="16" font-weight="700">灯光控制</text>
     <rect x="279" y="679" width="65" height="23" rx="6" fill="#244354" stroke="#3a5260" stroke-width="1"/>
-    <circle cx="292" cy="690.5" r="3.5" fill="{{RGB_INDICATOR}}"/>
+    <circle cx="292" cy="690.5" r="3.5" fill="{{RGB_BADGE_COLOR}}"/>
     <text x="305" y="695" fill="{{RGB_BADGE_COLOR}}" font-size="12" font-weight="600">{{RGB_BADGE_TEXT}}</text>
+    <rect x="32" y="707" width="14" height="14" rx="3" fill="{{RGB_SWATCH}}" fill-opacity="{{RGB_SWATCH_OPACITY}}" stroke="#3a5260" stroke-width="1" stroke-opacity="{{RGB_SWATCH_OPACITY}}"/>
+    <text x="54" y="718" fill="#9bb1be" font-size="12">{{RGB_HEX_TEXT}}</text>
     <rect x="32" y="733" width="100" height="52" rx="5" fill="{{RGB_BREATHE_BG}}"/>
     <line x1="54" y1="757" x2="57" y2="755" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
     <line x1="57" y1="755" x2="60" y2="755" stroke="{{RGB_BREATHE_FG}}" stroke-width="1.5"/>
