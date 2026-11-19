@@ -287,11 +287,13 @@ def fan_values(data: dict) -> dict:
     rgb_state = valid_rgb_state(data.get("rgb_state"))
     mode = rgb_state[0] if rgb_state is not None else (0 if data.get("rgb") is False else None)
     rgb_status = {0: "灯光已关闭", 1: "常亮", 2: "彩虹", 3: "呼吸"}.get(mode, "灯光已开启" if data.get("rgb") is True else "灯光状态不可用")
-    swatch = ("#%02x%02x%02x" % tuple(rgb_state[1:])) if mode in (1, 3) else "#9bb1be"
+    show_color = mode in (1, 3)
+    swatch = ("#%02x%02x%02x" % tuple(rgb_state[1:])) if show_color else "none"
     values.update(RGB_BADGE_TEXT={0:"关闭",1:"常亮",2:"彩虹",3:"呼吸"}.get(mode,"未知"),
                   RGB_BADGE_COLOR="#9bb1be" if mode == 0 else "#9ee8ce" if mode is not None else "#f4b46f",
                   RGB_STATUS=rgb_status, RGB_COLOR="#9bb1be" if mode == 0 else "#edf6f8" if mode is not None else "#f4b46f",
-                  RGB_SWATCH="RGB_SWATCH_COLOR", RGB_SWATCH_OPACITY=1 if mode in (1, 3) else 0,
+                  RGB_SWATCH=swatch, RGB_SWATCH_OPACITY=int(show_color),
+                  RGB_HEX_TEXT=swatch.upper() if show_color else "",
                   RGB_BREATHE_BG="#6bbfe5" if mode == 3 else idle_bg,
                   RGB_BREATHE_FG=active_fg if mode == 3 else idle_fg,
                   RGB_STEADY_BG="#6bbfe5" if mode == 1 else idle_bg,
@@ -307,8 +309,6 @@ def fan_values(data: dict) -> dict:
                   BASIS_CPU_COLOR="#f5ad75" if cpu_unit else "#f4b46f",
                   BASIS_DRIVE_TEMP=drive_temp + drive_unit,
                   BASIS_DRIVE_COLOR="#75c4dc" if drive_unit else "#f4b46f")
-    values["RGB_INDICATOR"] = swatch if mode in (1,3) else values["RGB_BADGE_COLOR"]
-    values["RGB_SWATCH"] = swatch
     return values
 
 
@@ -319,10 +319,11 @@ def render_fans(data: dict, *, web_layout: bool = True, theme: str | None = None
 
 def render_values(view, values, theme):
     values = dict(values)
-    swatch = values.get("RGB_SWATCH", "#9bb1be")
+    swatch = values.get("RGB_SWATCH", "none")
+    hex_text = values.get("RGB_HEX_TEXT", "")
     if view == "fans":
         values["RGB_SWATCH"] = "RGB_SWATCH_COLOR"
-        if values["RGB_SWATCH_OPACITY"] == 1:
-            values["RGB_INDICATOR"] = "RGB_SWATCH_COLOR"
+        values["RGB_HEX_TEXT"] = "RGB_LITERAL_TEXT"
     template = "r1_web_information_web.svg" if view == "panel" else "r1_web_fans_web.svg"
-    return theme_svg(_template(template, values), theme).replace(b"RGB_SWATCH_COLOR", swatch.encode("ascii"))
+    svg = theme_svg(_template(template, values), theme)
+    return svg.replace(b"RGB_SWATCH_COLOR", swatch.encode("ascii")).replace(b"RGB_LITERAL_TEXT", hex_text.encode("ascii"))

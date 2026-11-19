@@ -2,9 +2,11 @@
 import json
 import time
 import threading
+import tempfile
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 import unittest
 from unittest.mock import Mock, patch
@@ -34,6 +36,49 @@ def canonical(root):
 
 
 class WebDomTests(unittest.TestCase):
+    def test_vm_selection_http_auth_csrf_and_persistence(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), web.Handler)
+        thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.01}, daemon=True)
+        thread.start()
+        url = f'http://127.0.0.1:{server.server_port}/api/vm-monitor'
+        admin = {'Cookie': 'r1session=session', 'Origin': url.rsplit('/api/', 1)[0]}
+        write = {**admin, 'X-R1-CSRF': 'csrf', 'Content-Type': 'application/json'}
+
+        def send(headers, body=None):
+            request = Request(url, headers=headers, data=json.dumps(body).encode() if body is not None else None)
+            with urlopen(request, timeout=2) as response:
+                return json.load(response)
+
+        def denied(code, headers, body=None):
+            with self.assertRaises(HTTPError) as error:
+                send(headers, body)
+            self.assertEqual(error.exception.code, code)
+            error.exception.close()
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / 'vm-monitor.json'
+                with patch.object(web.vm_monitor, 'SELECTION_FILE', path), \
+                     patch.object(web, 'LOG_ENABLED', False), \
+                     patch.object(web, 'read_snapshot', return_value={'vm_inventory': [100, 111, 200]}) as read, \
+                     patch.dict(web.SESSIONS, {'session': (time.time()+60, 'csrf')}, clear=True):
+                    denied(401, {})
+                    self.assertEqual(send(admin)['vmids'], [100, 111, 200])
+                    denied(403, admin, {'vmids': [100, 200]})
+                    denied(400, write, {'vmids': [True]})
+                    denied(400, write, {'vmids': [999]})
+                    self.assertFalse(path.exists())
+                    self.assertEqual(send(write, {'vmids': [100, 200]})['selected'], [100, 200])
+                    self.assertEqual(send(admin)['selected'], [100, 200])
+                    read.return_value = {}
+                    denied(503, write, {'vmids': []})
+                    self.assertEqual(json.loads(path.read_text())['vmids'], [100, 200])
+                    read.return_value = {'vm_inventory': [100, 111, 200]}
+                    self.assertEqual(send(write, {'vmids': []})['selected'], [])
+                    self.assertEqual(send(admin)['selected'], [])
+        finally:
+            server.shutdown(); server.server_close(); thread.join(2)
+
     def test_projection_shared_by_clients_but_health_checked_once_each_request(self):
         frame = {'values': {'panel': information_values({}), 'fans': fan_values({})},
                  'theme': 'mocha', 'groups': {}, 'updated': 100.0}

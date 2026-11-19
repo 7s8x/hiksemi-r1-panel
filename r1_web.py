@@ -43,6 +43,8 @@ from r1_collection import read_snapshot
 from r1_svg_painter import paint_svg
 from r1_public_frames import PngCache
 from r1_theme import load_theme, save_theme
+from r1_site_config import SITE
+import r1_vm_status as vm_monitor
 
 
 SELECTABLE_THEMES = ("mocha", "latte")
@@ -55,6 +57,7 @@ INITIAL_FILE = STATE_DIR / "initial-password"
 CERT_FILE = STATE_DIR / "server.crt"
 KEY_FILE = STATE_DIR / "server.key"
 RGB_VERIFIED = STATE_DIR / "rgb-verified"
+VM_MONITOR_LOCK = threading.Lock()
 def _load_allowed() -> tuple:
     """Source networks allowed to reach the web service.
 
@@ -187,6 +190,12 @@ def atomic_json(path: Path, record: dict):
             temporary.unlink()
         except FileNotFoundError:
             pass
+
+
+def vm_monitor_settings():
+    inventory = read_snapshot().get("vm_inventory")
+    return {"available": inventory is not None, "vmids": inventory or [],
+            "selected": list(vm_monitor.selected_vmids(SITE.vmids))}
 
 
 def change_admin_password(current: str, new: str) -> None:
@@ -712,6 +721,10 @@ class Handler(BaseHTTPRequestHandler):
                              "curve_error": curve_error,
                              "rgb_color_enabled": RGB_VERIFIED.exists(),
                              "csrf": session[1]})
+        elif path == "/api/vm-monitor":
+            with VM_MONITOR_LOCK:
+                settings = vm_monitor_settings()
+            self._json(200, settings)
         elif path == "/api/frame.png":
             panel = read_state()
             if panel is None:
@@ -800,6 +813,20 @@ class Handler(BaseHTTPRequestHandler):
                 with THEME_LOCK:
                     save_theme(body["theme"])
                 self._json(200, {"ok": True, "theme": load_theme()})
+            elif path == "/api/vm-monitor":
+                if not isinstance(body, dict) or set(body) != {"vmids"}:
+                    raise ValueError("invalid VM request")
+                selection = vm_monitor.validate_selection(body["vmids"])
+                with VM_MONITOR_LOCK:
+                    settings = vm_monitor_settings()
+                    if not settings["available"]:
+                        self._json(503, {"error": "虚拟机清单暂不可用，请刷新后重试"})
+                        return
+                    if not set(selection) <= set(settings["vmids"] + settings["selected"]):
+                        self._json(400, {"error": "虚拟机清单已变化，请刷新后重试"})
+                        return
+                    atomic_json(vm_monitor.SELECTION_FILE, {"vmids": list(selection)})
+                self._json(200, {"ok": True, **settings, "selected": list(selection)})
             elif path == "/api/panel":
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")

@@ -67,6 +67,7 @@
  <section id="passwordCard" class="card hide"><h2>修改管理员密码</h2><p class="hint">新密码至少 8 个字符；建议使用更长的随机密码。保存后所有设备的 Web 会话都会退出，需要使用新密码重新登录。</p><div class="row"><input id="currentPassword" type="password" autocomplete="current-password" placeholder="当前密码"><input id="newPassword" type="password" autocomplete="new-password" placeholder="新密码（8–256 字符）"><input id="confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入新密码"></div><div class="row"><button id="savePassword" class="primary">保存新密码</button><button id="cancelPassword">取消</button></div><div id="passwordMessage" class="status" role="status"></div></section>
  <div class="grid">
   <section>
+   <div class="card"><h2>虚拟机监控</h2><p class="hint">勾选要显示在 Web 和实体屏「虚拟机状态」卡片中的本机虚拟机。也可全部取消，不会启动、停止或修改虚拟机。</p><div id="vmChoices" class="row" role="group" aria-label="监控的虚拟机"></div><div class="row"><button id="vmSave" class="primary" disabled>保存监控范围</button><button id="vmReload">刷新清单</button></div><div id="vmMessage" class="status" role="status"></div></div>
    <div class="card"><div class="top"><h2>实体屏</h2><span id="pageState" class="pill">连接中</span></div><details id="mirrorDetails" class="mirror-details"><summary>查看实体屏实时镜像</summary><img id="screen" class="screen" alt="R1 实体屏实时画面"><p class="hint">四页与实体屏顺序一致：信息页 → 风扇页 → PVE 控制台 → 黑屏。点击信息页或风扇页画面可模拟单击；控制台画面仅供查看，黑屏显示纯黑画面。</p></details><div class="row" id="pageButtons"><button data-page="panel">信息页</button><button data-page="fans">风扇页</button><button data-page="console">PVE 控制台</button><button data-page="off">熄屏</button></div><label class="row">亮度 <input id="brightness" type="range" min="2" max="100" value="40" style="flex:1"><span id="brightnessValue">--%</span></label></div>
   </section>
   <section>
@@ -92,8 +93,48 @@ function plotColor(color){const palette=document.documentElement.dataset.theme==
 function applyTheme(name){if(!themes.has(name))return;const previous=document.documentElement.dataset.theme;document.documentElement.dataset.theme=name;$('themeSelect').value=name;if(previous!==name)for(const graph of Object.keys(graphSpec))plotCurve(graph)}
 async function syncTheme(){if($('themeSelect').disabled)return;try{const response=await fetch('/api/theme',{cache:'no-store'});if(!response.ok)return;const data=await response.json();applyTheme(data.theme)}catch(_){}}
 $('themeSelect').onchange=async()=>{const select=$('themeSelect'),previous=document.documentElement.dataset.theme||'mocha';select.disabled=true;try{const data=await api('/api/theme',{theme:select.value});applyTheme(data.theme);message('配色已保存，Web 与实体屏约 15 秒内同步')}catch(error){applyTheme(previous);message(error.message,true)}finally{select.disabled=false}};
-async function login(){try{const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});const data=await response.json();if(!response.ok)throw Error(data.error||'登录失败');csrf=data.csrf;$('password').value='';$('login').classList.add('hide');$('public').classList.add('hide');$('app').classList.remove('hide');refreshWebViews();await refresh()}catch(error){$('loginMessage').textContent=error.message}}
+async function login(){try{const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});const data=await response.json();if(!response.ok)throw Error(data.error||'登录失败');csrf=data.csrf;$('password').value='';$('login').classList.add('hide');$('public').classList.add('hide');$('app').classList.remove('hide');loadVmChoices();refreshWebViews();await refresh()}catch(error){$('loginMessage').textContent=error.message}}
 $('loginButton').onclick=login;$('password').onkeydown=e=>{if(e.key==='Enter')login()};
+function showVmChoices(data){
+  const list=$('vmChoices'), selected=new Set(data.selected), available=new Set(data.vmids);
+  list.replaceChildren();
+  for(const id of [...new Set([...data.vmids,...data.selected])].sort((a,b)=>a-b)){
+    const label=document.createElement('label'), input=document.createElement('input');
+    input.type='checkbox'; input.value=String(id); input.checked=selected.has(id);
+    input.disabled=!data.available;
+    label.append(input, ' VM '+id+(data.available&&!available.has(id)?'（未发现）':''));
+    list.append(label);
+  }
+  $('vmSave').disabled=!data.available;
+}
+function vmMessage(text, error=false){
+  $('vmMessage').textContent=text;
+  $('vmMessage').className='status '+(error?'error':'ok');
+}
+async function loadVmChoices(){
+  $('vmReload').disabled=true;$('vmSave').disabled=true;
+  vmMessage('正在读取虚拟机清单…');
+  try{
+    const data=await api('/api/vm-monitor');
+    showVmChoices(data);
+    vmMessage(!data.available?'清单暂不可用，已保存的选择不变。':!data.vmids.length?'未发现本机 QEMU 虚拟机。':'',!data.available);
+  }catch(error){$('vmChoices').replaceChildren();vmMessage(error.message,true)}
+  finally{$('vmReload').disabled=false}
+}
+$('vmReload').onclick=loadVmChoices;
+$('vmSave').onclick=async()=>{
+  const boxes=[...$('vmChoices').querySelectorAll('input')];
+  const vmids=boxes.filter(box=>box.checked).map(box=>Number(box.value));
+  $('vmSave').disabled=$('vmReload').disabled=true;
+  boxes.forEach(box=>box.disabled=true);
+  try{
+    const data=await api('/api/vm-monitor',{vmids});
+    showVmChoices(data);
+    vmMessage('已保存 '+data.selected.length+' 台，下次刷新同步到卡片。');
+    refreshWebViews();
+  }catch(error){boxes.forEach(box=>box.disabled=false);$('vmSave').disabled=false;vmMessage(error.message,true)}
+  finally{$('vmReload').disabled=false}
+};
 $('logout').onclick=async()=>{try{await api('/api/logout',{})}catch(_){}location.reload()};
 $('showLogin').onclick=()=>{$('public').classList.add('hide');$('login').classList.remove('hide');$('password').focus()};
 $('backPublic').onclick=()=>{$('password').value='';$('loginMessage').textContent='';$('login').classList.add('hide');$('public').classList.remove('hide');refreshWebViews()};
@@ -245,7 +286,7 @@ $('mirrorDetails').ontoggle=()=>{if($('mirrorDetails').open&&!document.hidden&&!
 document.addEventListener('visibilitychange',()=>{if(document.hidden)clearMirror();else if($('mirrorDetails').open&&!$('app').classList.contains('hide'))refresh()});
 async function refresh(){if(refreshing)return;refreshing=true;try{const data=await api('/api/status');csrf=data.csrf;const panel=data.panel;state=panel?.state||'';$('pageState').textContent=panel?({'panel':'信息页','fans':'风扇页','console':'PVE 控制台','off':'黑屏'}[state]||state):'前屏离线';if(panel){$('brightness').value=panel.brightness;$('brightnessValue').textContent=panel.brightness+'%'}updateMirror(panel);const fan=data.fan;const modeLabel={'full':'全速','high':'标准','low':'静音'}[fan.mode]||'未知';$('fanStatus').textContent=fan.live?`当前 ${modeLabel} · 机箱 ${outputPercent(fan.pwm2??fan.pwm)}% / CPU ${outputPercent(fan.pwm3??fan.pwm)}%${fan.remaining?` · 剩余 ${fan.remaining} 秒`:''}`:'温控服务离线';for(const id of ['fanFull','fanHigh','fanLow','webFanFull','webFanHigh','webFanLow'])$(id).disabled=!fan.live;profiles=data.profiles||{high:data.curves,low:data.curves};if(!curves){curves=profiles[activeProfile]||data.curves;drawCurve('cpu',curves.cpu);drawCurve('drive',curves.drive)}if(data.curve_error){$('curveMessage').textContent='曲线配置读取异常：'+data.curve_error;$('curveMessage').className='status error'}verified=data.rgb_color_enabled;updateWebRgbButtons();$('rgbMode').disabled=!verified;$('rgbColor').disabled=!verified;$('rgbApply').disabled=!verified;$('rgbHint').textContent=verified?'常亮、呼吸、彩虹和颜色已在本机实测；调色后点击“应用灯效”。':'调色与新灯效需现场目视验证后开放；开关功能已验证。';if(Date.now()-rgbRefreshed>=15000){const r=await api('/api/rgb');rgb=r.rgb;rgbRefreshed=Date.now()}$('rgbStatus').textContent=`当前 ${['关闭','常亮','彩虹','呼吸'][rgb[0]]||'未知'} · RGB(${rgb.slice(1).join(', ')})`;if(!rgbDraftDirty)$('rgbColor').value='#'+rgb.slice(1).map(v=>v.toString(16).padStart(2,'0')).join('');}catch(e){clearMirror();if(e.message==='login required'){location.reload();return}message(e.message,true)}finally{refreshing=false}}
 setInterval(()=>{if(!$('app').classList.contains('hide')&&!document.hidden)refresh()},1500);
-api('/api/status').then(data=>{csrf=data.csrf;$('public').classList.add('hide');$('login').classList.add('hide');$('app').classList.remove('hide');refreshWebViews();refresh()}).catch(()=>{});
+api('/api/status').then(data=>{csrf=data.csrf;$('public').classList.add('hide');$('login').classList.add('hide');$('app').classList.remove('hide');loadVmChoices();refreshWebViews();refresh()}).catch(()=>{});
 </script>
 </body>
 </html>
