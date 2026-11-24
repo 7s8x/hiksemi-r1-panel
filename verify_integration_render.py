@@ -95,10 +95,15 @@ for theme in ('mocha', 'latte'):
                         position = node.get('y', node.get('cy', node.get('y1', '0')))
                         if float(position) >= 521:
                             group.remove(node)
-                # Approved mode-label rename and separator trim to the label's x=171.
+                        elif (node.tag.endswith('}line') and node.get('y1') in ('227','239','438','450')
+                              or node.tag.endswith('}text') and
+                              (node.get('x'), node.get('y')) in {
+                                  ('171','202'), ('171','222'), ('171','413'), ('171','433'),
+                                  ('329','174'), ('329','168'), ('329','385'), ('329','379'),
+                                  ('329','213'), ('329','222'), ('329','424'), ('329','433')}):
+                            group.remove(node)
+                # Compare unchanged fan elements after normalizing approved display differences.
                 for node in root.iter():
-                    if node.tag.rsplit('}',1)[-1] == 'line' and node.get('y1') in ('227','438'):
-                        node.set('x1','171')
                     if node.tag.endswith('}circle') and node.get('stroke-dasharray') is not None:
                         if (data.get('fans') or {}).get(
                                 {'209': 'fan2_input', '420': 'fan3_input'}.get(node.get('cy'))) not in (None, 0):

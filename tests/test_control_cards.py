@@ -128,8 +128,15 @@ class ControlCardTests(unittest.TestCase):
         badges=[n for n in root.findall('.//s:rect',NS) if n.get('x')=='279']
         self.assertEqual({n.get('width') for n in badges},{'65'})
         self.assertEqual([(n.get('y'),n.get('height')) for n in badges],[('534','23'),('679','23'),('824','23')])
-        separators=[n for n in root.findall('.//s:line',NS) if n.get('y1') in ('227','438')]
-        self.assertEqual([(n.get('x1'),n.get('x2')) for n in separators],[('171','344'),('171','344')])
+        separators=[n for n in root.findall('.//s:line',NS) if n.get('y1') in ('239','450')]
+        self.assertEqual([(n.get('x1'),n.get('x2')) for n in separators],[('171','329'),('171','329')])
+        labels=[n for n in root.findall('.//s:text',NS) if n.text=='转速']
+        self.assertEqual([n.get('y') for n in labels], ['222','433'])
+        for label in labels:
+            self.assertIsNone(label.get('dominant-baseline'))
+            reading=next(n for n in root.findall('.//s:text',NS)
+                         if n.get('x')=='329' and n.get('y')==label.get('y'))
+            self.assertEqual(reading.get('font-size'), '48')
         text=''.join(root.itertext())
         for removed in ('CPU 最高 ','硬盘最高 ','温控依据','根据温度自动调节风量','已生效','已开启','已关闭'):
             self.assertNotIn(removed,text)

@@ -260,7 +260,7 @@ def fan_values(data: dict) -> dict:
         values.update({
             prefix + "RPM": str(round(rpm)) if rpm is not None else "--",
             prefix + "RPM_UNIT": "RPM" if rpm is not None else "",
-            prefix + "RPM_FONT": 29 if rpm is not None and rpm >= 10000 else 35,
+            prefix + "RPM_FONT": 40 if rpm is not None and round(rpm) >= 10000 else 48,
             prefix + "RPM_COLOR": rpm_color,
             prefix + "OUTPUT": f"{percent}%" if percent is not None else "--",
             prefix + "OUTPUT_COLOR": output_color,
