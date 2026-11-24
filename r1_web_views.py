@@ -63,6 +63,14 @@ def _free_amount(size_bytes: int) -> str:
     return f"{size_bytes / 1_000_000_000_000:.2f}TB" if size_bytes >= 1_000_000_000_000 else f"{size_bytes / 1_000_000_000:.0f}GB"
 
 
+def load_color(percent, warn, high):
+    if percent is not None and percent >= high:
+        return "#f38ba8"
+    if percent is not None and percent >= warn:
+        return "#f4b46f"
+    return "#74bffe"
+
+
 def information_values(data: dict) -> dict:
     """Format display fields without building an image or reading hardware."""
     values = _shared(data)
@@ -70,15 +78,18 @@ def information_values(data: dict) -> dict:
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
     total = _number(data.get("mem_total"), 0, 10000)
     used = _number(data.get("mem_used"), 0, 10000)
+    used_text = f"{used:.1f}" if used is not None else "--"
+    total_text = f"{total:.0f}" if total is not None else "--"
+    memory_digits = len(used_text) + len(total_text)
     values.update(CPU_MODEL=data.get("cpu_model") or "CPU",
                   CPU_ARC=round(364 * usage / 100) if usage is not None else 0,
+                  CPU_ARC_COLOR=load_color(round(usage) if usage is not None else None, 60, 85),
                   CPU_USAGE=f"{round(usage)}%" if usage is not None else "--",
                   CPU_TEMP=cpu_temp, CPU_TEMP_UNIT=cpu_unit,
-                  MEM_USED=f"{used:.1f}" if used is not None else "--",
-                  MEM_TOTAL=f"{total:.0f}" if total is not None else "--")
+                  MEM_USED=used_text, MEM_TOTAL=total_text,
+                  MEM_FONT=25 if memory_digits <= 6 else 21 if memory_digits <= 8 else 16)
     states = list(data.get("bay_states") or [])
     storage = list(data.get("storage") or [])
-    models = list(data.get("storage_models") or [])
     percents = list(data.get("storage_usage") or [])
     capacities = list(data.get("storage_capacity") or [])
     for index in range(5):
@@ -86,10 +97,10 @@ def information_values(data: dict) -> dict:
         raw_size, kind = str(identity[0]), str(identity[1])
         size = re.sub(r"^BAY [1-4]\s+", "", raw_size) if index else raw_size
         known = kind != "UNVERIFIED" and size != "--"
-        title = (f"NVMe · {size}" if index == 0 else
-                 f"BAY {index} · {size} {kind}" if known else f"BAY {index} · 待核实")
+        title = "NVMe" if index == 0 else f"BAY {index}"
+        detail = ("待核实" if not known else size if index == 0 else f"{size} {kind}")
         if index and index - 1 < len(states) and states[index - 1] == "empty":
-            title = f"BAY {index} · 空盘位"
+            detail = "空盘位"
         percent = _number(percents[index]) if index < len(percents) else None
         percent = round(percent) if percent is not None and known else None
         record = capacities[index] if index < len(capacities) else None
@@ -105,20 +116,37 @@ def information_values(data: dict) -> dict:
             used_text = f"已用 -- · {percent}%" if percent is not None else "已用 --"
             total_text = "-- 可用" if known else "--"
         temp, unit = _temperature(temperature)
-        model = str(models[index]) if index < len(models) else "--"
+        detail = detail if len(detail) <= 16 else detail[:15].rstrip() + "…"
+        detail_width = sum(0.7 if c.isascii() else 1 for c in detail)
         values.update({
-            f"D{index}_TITLE": title[:23],
-            f"D{index}_MODEL": model[:24],
+            f"D{index}_TITLE": title,
+            f"D{index}_DETAIL": detail,
+            f"D{index}_DETAIL_FONT": min(30, int(165 / max(1, detail_width))),
             f"D{index}_TEMP": temp,
             f"D{index}_UNIT": unit,
             f"D{index}_BAR": round(290 * percent / 100) if percent is not None else 0,
-            f"D{index}_BAR_COLOR": "#f4b46f" if percent is not None and percent >= 90 else "#6bbfe5",
+            f"D{index}_BAR_COLOR": load_color(percent, 75, 90),
             f"D{index}_USED": used_text,
             f"D{index}_TOTAL": total_text,
         })
 
     return values
 
+
+
+def fit_vm_label(name, tile_width):
+    from unicodedata import east_asian_width, category
+    budget = (tile_width - 12) // 7
+    widths = [0 if category(c).startswith('M') else 2 if east_asian_width(c) in ('F', 'W') else 1
+              for c in name]
+    if sum(widths) <= budget:
+        return name
+    used = 0
+    for i, width in enumerate(widths):
+        if used + width >= budget:
+            return name[:i].rstrip() + '…'
+        used += width
+    return name
 
 
 def vm_values(data):
@@ -161,7 +189,7 @@ def vm_values(data):
         values.update({f"VM{index}_{key}": value for key, value in {
             "X": x, "WIDTH": tile_width if shown else 0, "VISIBLE": int(shown),
             "CENTER": f"{center:g}", "DOT_X": f"{center - 26:g}", "STATUS_X": f"{center + 8:g}",
-            "NAME": str(vmid)[:16],
+            "NAME": fit_vm_label(str(data.get("vm_display_names", {}).get(vmid, vmid)), tile_width) if shown else "",
             "STATUS": {"RUNNING": "运行中", "STOPPED": "已停止"}.get(status, "状态未知") if shown else "",
             "COLOR": "#9ee8ce" if status == "RUNNING" else "#f4b46f",
         }.items()})
@@ -215,7 +243,7 @@ def fan_values(data: dict) -> dict:
         percent = round(pwm * 100 / 255) if pwm is not None else None
         stopped = rpm == 0 if rpm is not None else False
         fault = stopped or rpm is None
-        arc_color = "#f4b46f" if fault else "#74bfff"
+        arc_color = "#f4b46f" if fault else load_color(percent, 70, 90)
         rpm_color = "#f4b46f" if fault else "#75c4dc"
         output_color = "#f4b46f" if fault else "#edf6f8"
         if stopped:

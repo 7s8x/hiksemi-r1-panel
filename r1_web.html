@@ -95,15 +95,25 @@ async function syncTheme(){if($('themeSelect').disabled)return;try{const respons
 $('themeSelect').onchange=async()=>{const select=$('themeSelect'),previous=document.documentElement.dataset.theme||'mocha';select.disabled=true;try{const data=await api('/api/theme',{theme:select.value});applyTheme(data.theme);message('配色已保存，Web 与实体屏约 15 秒内同步')}catch(error){applyTheme(previous);message(error.message,true)}finally{select.disabled=false}};
 async function login(){try{const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});const data=await response.json();if(!response.ok)throw Error(data.error||'登录失败');csrf=data.csrf;$('password').value='';$('login').classList.add('hide');$('public').classList.add('hide');$('app').classList.remove('hide');loadVmChoices();refreshWebViews();await refresh()}catch(error){$('loginMessage').textContent=error.message}}
 $('loginButton').onclick=login;$('password').onkeydown=e=>{if(e.key==='Enter')login()};
+let vmDraftRows=[];
 function showVmChoices(data){
   const list=$('vmChoices'), selected=new Set(data.selected), available=new Set(data.vmids);
   list.replaceChildren();
+  vmDraftRows=[];
   for(const id of [...new Set([...data.vmids,...data.selected])].sort((a,b)=>a-b)){
-    const label=document.createElement('label'), input=document.createElement('input');
+    const row=document.createElement('div'), label=document.createElement('label'), input=document.createElement('input');
+    row.className='row'; row.style.flexBasis='100%';
     input.type='checkbox'; input.value=String(id); input.checked=selected.has(id);
-    input.disabled=!data.available;
-    label.append(input, ' VM '+id+(data.available&&!available.has(id)?'（未发现）':''));
-    list.append(label);
+    label.append(input, ' VM '+id+(data.available&&!available.has(id)?'（未发现）':data.names?.[id]?' · '+data.names[id]:''));
+    const mode=document.createElement('select');
+    const saved=data.labels?.[id];
+    for(const [value,title] of [['id','显示编号'],['pve','显示 PVE 名称']]){
+      const option=document.createElement('option'); option.value=value;option.textContent=title;mode.append(option);
+    }
+    mode.value=saved?.mode==='pve'?'pve':'id'; mode.setAttribute('aria-label','VM '+id+' 显示方式');
+    input.disabled=mode.disabled=!data.available;
+    row.append(label,mode);list.append(row);
+    vmDraftRows.push({id,input,mode});
   }
   $('vmSave').disabled=!data.available;
 }
@@ -123,12 +133,15 @@ async function loadVmChoices(){
 }
 $('vmReload').onclick=loadVmChoices;
 $('vmSave').onclick=async()=>{
-  const boxes=[...$('vmChoices').querySelectorAll('input')];
-  const vmids=boxes.filter(box=>box.checked).map(box=>Number(box.value));
+  const vmids=vmDraftRows.filter(row=>row.input.checked).map(row=>row.id), labels={};
+  for(const {id,mode} of vmDraftRows){
+    if(mode.value==='pve')labels[id]={mode:'pve'};
+  }
+  const boxes=vmDraftRows.flatMap(row=>[row.input,row.mode]);
   $('vmSave').disabled=$('vmReload').disabled=true;
   boxes.forEach(box=>box.disabled=true);
   try{
-    const data=await api('/api/vm-monitor',{vmids});
+    const data=await api('/api/vm-monitor',{vmids,labels});
     showVmChoices(data);
     vmMessage('已保存 '+data.selected.length+' 台，下次刷新同步到卡片。');
     refreshWebViews();
@@ -185,9 +198,11 @@ async function refreshWebViews(){
   if(webViewsBusy){webViewsAgain=true;return}
   webViewsBusy=true;const started=performance.now();
   try{
-    const data=await displayJson('/public/state.json');
+    const adminView=!$('app').classList.contains('hide');
+    const data=await displayJson(adminView?'/api/display-state':'/public/state.json');
     if(!webLayout||webLayout.id!==data.id)webLayout=await displayJson('/public/layout.json');
     const remaining=data.valid_for*1000-(performance.now()-started);
+    if(adminView===$('app').classList.contains('hide')){webViewsAgain=true;return}
     if(webLayout.id!==data.id||!Number.isFinite(remaining)||remaining<=0||document.hidden)throw Error('expired display');
     for(const [section,prefix] of [['public','public'],['app','web']]){
       if($(section).classList.contains('hide'))continue;

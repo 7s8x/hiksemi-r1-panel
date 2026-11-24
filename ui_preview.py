@@ -11,16 +11,20 @@ from r1_web_views import information_values, fan_values
 
 from r1_web_views import render_information, render_fans
 from r1_fan_config import DEFAULT
+from r1_vm_status import validate_labels
 
 ROOT = Path(__file__).resolve().parent
 VM_IDS = (100, 111, 200)
 preview_selection = VM_IDS
+preview_labels = {}
+VM_NAMES = {"100": "Synology", "111": "OpenWrt", "200": "Home Assistant"}
 preview_lock = Lock()
 
 
 def preview_vm_settings():
     with preview_lock:
-        return {"available": True, "vmids": VM_IDS, "selected": preview_selection}
+        return {"available": True, "vmids": VM_IDS, "selected": preview_selection,
+                "names": VM_NAMES, "labels": preview_labels}
 
 
 def preview_web_source():
@@ -48,8 +52,19 @@ def demo_data():
     }
 
 
+def preview_data():
+    data = demo_data()
+    data["cpu_usage"] = 64
+    data["fans"].update(pwm2=120, pwm3=245)
+    data["storage_usage"][1:4] = [42, 78, 96]
+    data["storage_capacity"][1:4] = [(840*10**9, 1160*10**9, 42),
+                                     (780*10**9, 220*10**9, 78),
+                                     (3840*10**9, 160*10**9, 96)]
+    return data
+
+
 def demo_svg(page, theme):
-    return (render_information if page == "panel" else render_fans)(demo_data(), theme=theme)
+    return (render_information if page == "panel" else render_fans)(preview_data(), theme=theme)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -65,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(payload)
 
     def do_POST(self):
-        global preview_selection
+        global preview_selection, preview_labels
         if self.path != "/api/vm-monitor":
             return self._json(403, {"error": "模拟预览不支持设备或账户操作"})
         authority = f"127.0.0.1:{self.server.server_port}"
@@ -78,7 +93,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
             data = json.loads(self.rfile.read(length))
             values = data["vmids"]
+            labels = validate_labels(data.get("labels", {}))
             if (not isinstance(values, list) or len(values) > len(VM_IDS)
+                    or not set(labels) <= VM_NAMES.keys()
                     or any(type(id) is not int or id not in VM_IDS for id in values)
                     or len(set(values)) != len(values)):
                 raise ValueError
@@ -86,6 +103,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "演示虚拟机选择无效"})
         with preview_lock:
             preview_selection = tuple(values)
+            preview_labels = labels
         self._json(200, {"ok": True, **preview_vm_settings()})
 
     def do_GET(self):
@@ -96,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path in ("/panel.svg", "/fans.svg"):
             payload = demo_svg(parsed.path[1:-4], theme); mime = "image/svg+xml"
         elif parsed.path in ("/web", "/manage"):
-            source = preview_web_source().replace("fetch('/api/theme',", "fetch('/api/theme?theme=" + theme + "',").replace("'/public/state.json'", "'/public/state.json?theme=" + theme + "'").replace("'/public/layout.json'", "'/public/layout.json?theme=" + theme + "'")
+            source = preview_web_source().replace("fetch('/api/theme',", "fetch('/api/theme?theme=" + theme + "',").replace("'/public/state.json'", "'/public/state.json?theme=" + theme + "'").replace("'/public/layout.json'", "'/public/layout.json?theme=" + theme + "'").replace("'/api/display-state'", "'/api/display-state?theme=" + theme + "'")
             if parsed.path == "/manage":
                 source = source.replace("api('/api/status')", "api('/api/status?preview=1')")
                 source = source.replace("实体屏实时镜像 · 风扇与灯光设置", "本机模拟 · 仅测试虚拟机监控 · 不连接 PVE")
@@ -110,9 +128,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, preview_vm_settings())
         elif parsed.path == "/api/rgb":
             return self._json(200, {"rgb": [0, 0, 0, 0]})
-        elif parsed.path in ("/public/state.json", "/public/layout.json", "/api/theme"):
+        elif parsed.path in ("/public/state.json", "/public/layout.json", "/api/display-state", "/api/theme"):
             spec = document_layout(theme)
-            sample = demo_data()
+            sample = preview_data()
+            if parsed.path == "/api/display-state":
+                sample["vm_display_names"] = {
+                    f"VM {key}": VM_NAMES[key]
+                    for key, spec in preview_vm_settings()["labels"].items() if spec["mode"] == "pve"}
             data = ({'theme': theme} if parsed.path == '/api/theme' else spec
                     if parsed.path.endswith('layout.json') else
                     {'id': spec['id'], 'theme': theme, 'valid_for': 30,

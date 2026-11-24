@@ -13,7 +13,7 @@ import time
 
 from r1_site_config import SITE
 from r1_snapshot import empty_display, FAST_FIELDS
-from r1_vm_status import selected_vmids, valid_vm_id, vm_inventory
+from r1_vm_status import clean_name, monitor_config, valid_vm_id, vm_inventory
 
 SNAPSHOT = Path('/run/r1-collector/snapshot.json')
 INTERVALS = {'fast': 5, 'vm': 60, 'nvme': 300, 'dsm': 1800, 'identity': 300}
@@ -51,8 +51,9 @@ def decode_snapshot(record, *, now, boot):
     if valid['fast']:
         data.update({k: fast['data'][k] for k in FAST_FIELDS if k in fast['data']})
         data['captured_at'] = fast['at']
-    vmids = selected_vmids(SITE.vmids)
+    vmids, labels = monitor_config(SITE.vmids)
     statuses = {}
+    names = {}
     if valid['vm']:
         vm_data = groups['vm']['data']
         rows = vm_data.get('vms', [])
@@ -62,7 +63,21 @@ def decode_snapshot(record, *, now, boot):
                 statuses[row[0]] = row[1] if row[0] not in statuses else 'UNKNOWN'
         if vm_data.get('inventory') is True:
             data['vm_inventory'] = sorted(statuses)
+            raw_names = vm_data.get('names')
+            if isinstance(raw_names, dict):
+                names = {str(v): name for v in statuses
+                         if (name := clean_name(raw_names.get(str(v))))}
+            data['vm_names'] = names
     data['vms'] = [(f'VM {v}', statuses.get(v, 'UNKNOWN')) for v in vmids]
+    display_names = {}
+    for v in vmids:
+        spec = labels.get(str(v), {})
+        mode = spec.get('mode')
+        name = names.get(str(v)) if mode == 'pve' else None
+        if name:
+            display_names[f'VM {v}'] = name
+    if display_names:
+        data['vm_display_names'] = display_names
     if valid['identity']:
         for k in ('pve_version', 'cpu_model'):
             value = groups['identity']['data'].get(k)
@@ -152,10 +167,11 @@ def collect_fast():
 
 def collect_slow(key, disks):
     if key == 'vm':
-        inventory = vm_inventory()
+        names = {}
+        inventory = vm_inventory(names)
         if inventory is None:
             raise RuntimeError('VM inventory unavailable')
-        return {'vms': list(inventory.items()), 'inventory': True}
+        return {'vms': list(inventory.items()), 'inventory': True, 'names': names}
     if key == 'identity':
         from r1_host_sampling import system_identity
         version, cpu = system_identity()

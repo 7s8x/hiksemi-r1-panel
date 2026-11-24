@@ -64,12 +64,22 @@ for theme in ('mocha', 'latte'):
             if view == 'panel':
                 root = ET.fromstring(svg)
                 # The system card deliberately loses VM rows and recentres temperature/memory.
-                # Header and all storage rows remain under the fixed historical baseline.
+                # Compare unchanged storage elements; approved typography moved
+                # the title and enlarged the temperature, and removed the model.
                 for group in root.iter():
+                    bar_tracks = set()
                     for node in list(group):
                         position = node.get('y', node.get('cy', node.get('y1', '0')))
                         if 99 <= float(position) < 296:
                             group.remove(node)
+                        elif (node.tag.endswith('}text') and float(position) >= 373
+                              and int(float(position) - 375) % 118 in (0, 24, 30, 31, 116)):
+                            group.remove(node)
+                        if (node.tag.endswith('}rect') and node.get('x') == '42'
+                                and node.get('height') == '6' and float(position) >= 421):
+                            if position in bar_tracks:
+                                node.set('fill', '#89b4fa')
+                            bar_tracks.add(position)
                 svg = ET.tostring(root, encoding='utf-8')
                 masked = Painter()
                 try:
@@ -89,6 +99,10 @@ for theme in ('mocha', 'latte'):
                 for node in root.iter():
                     if node.tag.rsplit('}',1)[-1] == 'line' and node.get('y1') in ('227','438'):
                         node.set('x1','171')
+                    if node.tag.endswith('}circle') and node.get('stroke-dasharray') is not None:
+                        if (data.get('fans') or {}).get(
+                                {'209': 'fan2_input', '420': 'fan3_input'}.get(node.get('cy'))) not in (None, 0):
+                            node.set('stroke', '#89b4fa' if theme == 'mocha' else '#ea76cb')
                     if node.get('x') == '329' and node.get('y') in ('257', '468'):
                         node.text = {'高速': '标准', '低速': '静音'}.get(node.text, node.text)
                 svg = ET.tostring(root, encoding='utf-8')

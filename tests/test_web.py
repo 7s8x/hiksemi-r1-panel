@@ -33,13 +33,16 @@ class WebTests(unittest.TestCase):
             temperatures = [node for node in root.iter()
                             if node.tag.endswith('text') and any(span.text == '°C' for span in node)]
             self.assertEqual(len(temperatures), 6)
-            self.assertEqual(temperatures[0].get('y'), '197')
+            self.assertEqual(temperatures[0].get('y'), '209')
+            label = next(node for node in root.iter() if node.tag.endswith('text') and node.text == '温度')
+            self.assertEqual(label.get('y'), temperatures[0].get('y'))
+            self.assertIsNone(label.get('dominant-baseline'))
             for node in temperatures:
                 self.assertIsNone(node.get('dominant-baseline'))
-                self.assertEqual(node.get('font-size'), '39')
+                self.assertEqual(node.get('font-size'), '48')
                 self.assertEqual(node.get('text-anchor'), 'end')
                 unit = next(span for span in node if span.text == '°C')
-                self.assertEqual(unit.get('font-size'), '17')
+                self.assertEqual(unit.get('font-size'), '21')
                 self.assertIsNone(unit.get('dominant-baseline'))
                 self.assertIsNone(unit.get('dy'))
 
@@ -104,7 +107,7 @@ class WebTests(unittest.TestCase):
         self.assertIn('fans', result['values'])
 
 
-    def test_web_views_escape_models_and_keep_fan_ring_semantics(self):
+    def test_web_views_omit_drive_models_and_keep_fan_ring_semantics(self):
         data = {
             "clock": "12:40", "uptime": 86400, "cpu_usage": 25, "cpu": 56,
             "storage": [(("1TB", "NVME", "****"), 42)],
@@ -122,13 +125,15 @@ class WebTests(unittest.TestCase):
         self.assertEqual(render_information(data), render_information(data, web_layout=False))
         self.assertEqual(fans, render_fans(data, web_layout=True).decode("utf-8"))
         self.assertEqual(render_fans(data), render_fans(data, web_layout=False))
-        self.assertIn("Model &lt;script&gt;", panel)
+        self.assertNotIn("Model ", panel)
         self.assertNotIn("<script>", panel)
         self.assertIn("已用 0.06T · 6%", panel)
         self.assertIn("940GB 可用", panel)
         self.assertNotIn("1TB · 940GB 可用", panel)
         data["storage"].append((("2TB", "SSD", "****"), 39))
-        self.assertIn("BAY 1 · 2TB SSD", render_information(data).decode("utf-8"))
+        disk = render_information(data).decode("utf-8")
+        self.assertIn(">BAY 1</text>", disk)
+        self.assertIn(">2TB SSD</text>", disk)
         self.assertNotIn("VM 100", panel)
         self.assertIn("VM 100", fans)
         self.assertIn("运行中", fans)
@@ -139,9 +144,10 @@ class WebTests(unittest.TestCase):
         self.assertIn('>存储</text>', web_panel)
         self.assertNotIn('>存储硬盘', web_panel)
         self.assertIn('cx="94" cy="209" r="58"', web_panel)
-        self.assertIn('x="329" y="250"', web_panel)
+        self.assertIn('x="329" y="260"', web_panel)
+        self.assertIn('x1="171" y1="225" x2="329" y2="225"', web_panel)
         self.assertNotIn('x="329" y="269"', web_panel)
-        self.assertIn('font-size="39" font-weight="700" text-anchor="end">56', web_panel)
+        self.assertIn('font-size="48" font-weight="700" text-anchor="end">56', web_panel)
         self.assertNotIn("Synology", panel)
         self.assertIn("995", fans)
         self.assertIn("47%", fans)
