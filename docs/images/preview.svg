@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="784" height="960" viewBox="0 0 784 960">
+
   <rect width="376" height="960" fill="#11111b"/>
   <g font-family="PingFang SC, Noto Sans CJK SC, Arial, sans-serif">
     <!-- Device and system identity -->
@@ -8,7 +9,7 @@
     <rect x="291" y="13" width="65" height="25" rx="6" fill="#2b3c37" stroke="#a6e3a1" stroke-width="1"/>
     <circle cx="304" cy="25.5" r="4" fill="#94e2d5"/>
     <text x="316" y="30" fill="#a6e3a1" font-size="12" font-weight="600">在线</text>
-    <text x="356" y="80" fill="#cdd6f4" font-size="37" font-weight="700" text-anchor="end">20:16</text>
+    <text x="356" y="80" fill="#cdd6f4" font-size="37" font-weight="700" text-anchor="end">21:42</text>
 
     <!-- Web-only CPU card: same height as the fan card, with VM status inside -->
     <rect x="16" y="99" width="344" height="197" rx="7" fill="#1e1e2e" stroke="#45475a"/>
@@ -18,62 +19,63 @@
     <circle cx="94" cy="209" r="58" fill="none" stroke="#89b4fa" stroke-width="11" stroke-linecap="round" stroke-dasharray="102 364" transform="rotate(-90 94 209)"/>
     <text x="94" y="213" fill="#cdd6f4" font-size="32" font-weight="700" text-anchor="middle">28%</text>
     <text x="94" y="238" fill="#a6adc8" font-size="12" text-anchor="middle">CPU 占用</text>
-    <text x="171" y="183" fill="#a6adc8" font-size="13" dominant-baseline="middle">温度</text>
-    <text x="329" y="197" fill="#fab387" font-size="39" font-weight="700" text-anchor="end">65<tspan font-size="17">°C</tspan></text>
-    <line x1="171" y1="211" x2="329" y2="211" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
-    <text x="171" y="244" fill="#a6adc8" font-size="13" dominant-baseline="middle">内存</text>
-    <text x="329" y="250" fill="#cdd6f4" font-size="17" font-weight="700" text-anchor="end">10.4<tspan fill="#a6adc8"> / 15</tspan><tspan fill="#a6adc8" font-size="11"> GiB</tspan></text>
+    <text x="171" y="209" fill="#a6adc8" font-size="13">温度</text>
+    <text x="329" y="209" fill="#fab387" font-size="48" font-weight="700" text-anchor="end">65<tspan font-size="21">°C</tspan></text>
+    <line x1="171" y1="225" x2="329" y2="225" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="254" fill="#a6adc8" font-size="13" dominant-baseline="middle">内存</text>
+    <text x="329" y="260" fill="#cdd6f4" font-size="25" font-weight="700" text-anchor="end">10.4<tspan fill="#a6adc8" font-size="14"> / 15 GiB</tspan></text>
 
     <!-- Web-only drive card fills the space released by the VM card -->
     <rect x="16" y="310" width="344" height="633" rx="7" fill="#1e1e2e" stroke="#45475a"/>
     <text x="32" y="340" fill="#cdd6f4" font-size="16" font-weight="700">存储</text>
     <text x="344" y="339" fill="#a6adc8" font-size="11" text-anchor="end">温度 / 占用</text>
 
-    <text x="42" y="375" fill="#cdd6f4" font-size="17" font-weight="700">NVMe · 1TB</text>
-    <text x="42" y="399" fill="#bac2de" font-size="12">DEMO NVMe</text>
-    <text x="332" y="406" fill="#89dceb" font-size="39" font-weight="700" text-anchor="end">43<tspan font-size="17">°C</tspan></text>
+    <text x="42" y="373" fill="#bac2de" font-size="12" font-weight="700">NVMe</text>
+    <text x="42" y="405" fill="#cdd6f4" font-size="30" font-weight="700">1TB</text>
+    <text x="332" y="406" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">43<tspan font-size="21">°C</tspan></text>
     <rect x="42" y="421" width="290" height="6" rx="3" fill="#45475a"/>
     <rect x="42" y="421" width="17" height="6" rx="3" fill="#89b4fa"/>
     <text x="42" y="446" fill="#bac2de" font-size="12" font-weight="700">已用 0.06T · 6%</text>
     <text x="332" y="446" fill="#bac2de" font-size="12" text-anchor="end">940GB 可用</text>
     <line x1="42" y1="462" x2="332" y2="462" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
 
-    <text x="42" y="493" fill="#cdd6f4" font-size="17" font-weight="700">BAY 1 · 2TB SSD</text>
-    <text x="42" y="517" fill="#bac2de" font-size="12">DEMO SSD</text>
-    <text x="332" y="524" fill="#89dceb" font-size="39" font-weight="700" text-anchor="end">39<tspan font-size="17">°C</tspan></text>
+    <text x="42" y="491" fill="#bac2de" font-size="12" font-weight="700">BAY 1</text>
+    <text x="42" y="523" fill="#cdd6f4" font-size="30" font-weight="700">2TB SSD</text>
+    <text x="332" y="524" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">39<tspan font-size="21">°C</tspan></text>
     <rect x="42" y="539" width="290" height="6" rx="3" fill="#45475a"/>
     <rect x="42" y="539" width="12" height="6" rx="3" fill="#89b4fa"/>
     <text x="42" y="564" fill="#bac2de" font-size="12" font-weight="700">已用 0.08T · 4%</text>
     <text x="332" y="564" fill="#bac2de" font-size="12" text-anchor="end">1.92TB 可用</text>
     <line x1="42" y1="580" x2="332" y2="580" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
 
-    <text x="42" y="611" fill="#cdd6f4" font-size="17" font-weight="700">BAY 2 · 1TB HDD</text>
-    <text x="42" y="635" fill="#bac2de" font-size="12">DEMO HDD</text>
-    <text x="332" y="642" fill="#89dceb" font-size="39" font-weight="700" text-anchor="end">38<tspan font-size="17">°C</tspan></text>
+    <text x="42" y="609" fill="#bac2de" font-size="12" font-weight="700">BAY 2</text>
+    <text x="42" y="641" fill="#cdd6f4" font-size="30" font-weight="700">1TB HDD</text>
+    <text x="332" y="642" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">38<tspan font-size="21">°C</tspan></text>
     <rect x="42" y="657" width="290" height="6" rx="3" fill="#45475a"/>
-    <rect x="42" y="657" width="223" height="6" rx="3" fill="#89b4fa"/>
+    <rect x="42" y="657" width="223" height="6" rx="3" fill="#fab387"/>
     <text x="42" y="682" fill="#bac2de" font-size="12" font-weight="700">已用 0.77T · 77%</text>
     <text x="332" y="682" fill="#bac2de" font-size="12" text-anchor="end">230GB 可用</text>
     <line x1="42" y1="698" x2="332" y2="698" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
 
-    <text x="42" y="729" fill="#cdd6f4" font-size="17" font-weight="700">BAY 3 · 4TB HDD</text>
-    <text x="42" y="753" fill="#bac2de" font-size="12">DEMO HDD</text>
-    <text x="332" y="760" fill="#89dceb" font-size="39" font-weight="700" text-anchor="end">39<tspan font-size="17">°C</tspan></text>
+    <text x="42" y="727" fill="#bac2de" font-size="12" font-weight="700">BAY 3</text>
+    <text x="42" y="759" fill="#cdd6f4" font-size="30" font-weight="700">4TB HDD</text>
+    <text x="332" y="760" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">39<tspan font-size="21">°C</tspan></text>
     <rect x="42" y="775" width="290" height="6" rx="3" fill="#45475a"/>
-    <rect x="42" y="775" width="252" height="6" rx="3" fill="#89b4fa"/>
+    <rect x="42" y="775" width="252" height="6" rx="3" fill="#fab387"/>
     <text x="42" y="800" fill="#bac2de" font-size="12" font-weight="700">已用 3.48T · 87%</text>
     <text x="332" y="800" fill="#bac2de" font-size="12" text-anchor="end">520GB 可用</text>
     <line x1="42" y1="816" x2="332" y2="816" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
 
-    <text x="42" y="847" fill="#cdd6f4" font-size="17" font-weight="700">BAY 4 · 4TB HDD</text>
-    <text x="42" y="871" fill="#bac2de" font-size="12">DEMO HDD</text>
-    <text x="332" y="878" fill="#89dceb" font-size="39" font-weight="700" text-anchor="end">37<tspan font-size="17">°C</tspan></text>
+    <text x="42" y="845" fill="#bac2de" font-size="12" font-weight="700">BAY 4</text>
+    <text x="42" y="877" fill="#cdd6f4" font-size="30" font-weight="700">4TB HDD</text>
+    <text x="332" y="878" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">37<tspan font-size="21">°C</tspan></text>
     <rect x="42" y="893" width="290" height="6" rx="3" fill="#45475a"/>
     <rect x="42" y="893" width="116" height="6" rx="3" fill="#89b4fa"/>
     <text x="42" y="918" fill="#bac2de" font-size="12" font-weight="700">已用 1.60T · 40%</text>
     <text x="332" y="918" fill="#bac2de" font-size="12" text-anchor="end">2.40TB 可用</text>
   </g>
 <g transform="translate(408 0)">
+
   <rect width="376" height="960" fill="#11111b"/>
   <g font-family="PingFang SC, Noto Sans CJK SC, Arial, sans-serif">
     <text x="20" y="35" fill="#cdd6f4" font-size="22" font-weight="700">HIKSEMI R1</text>
@@ -82,19 +84,19 @@
     <rect x="291" y="13" width="65" height="25" rx="6" fill="#2b3c37" stroke="#a6e3a1" stroke-width="1"/>
     <circle cx="304" cy="25.5" r="4" fill="#94e2d5"/>
     <text x="316" y="30" fill="#a6e3a1" font-size="12" font-weight="600">在线</text>
-    <text x="356" y="80" fill="#cdd6f4" font-size="37" font-weight="700" text-anchor="end">20:16</text>
+    <text x="356" y="80" fill="#cdd6f4" font-size="37" font-weight="700" text-anchor="end">21:42</text>
 
     <rect x="16" y="99" width="344" height="197" rx="7" fill="#1e1e2e" stroke="#45475a"/>
     <text x="32" y="127" fill="#cdd6f4" font-size="16" font-weight="700">机箱风扇</text>
     <text x="344" y="126" fill="#a6adc8" font-size="12" text-anchor="end">SYS FAN · FAN 2</text>
     <circle cx="94" cy="209" r="58" fill="none" stroke="#45475a" stroke-width="11"/>
-    <circle cx="94" cy="209" r="58" fill="none" stroke="#89b4fa" stroke-width="11" stroke-linecap="round" stroke-dasharray="262 364" transform="rotate(-90 94 209)"/>
+    <circle cx="94" cy="209" r="58" fill="none" stroke="#fab387" stroke-width="11" stroke-linecap="round" stroke-dasharray="262 364" transform="rotate(-90 94 209)"/>
     <text x="94" y="213" fill="#cdd6f4" font-size="32" font-weight="700" text-anchor="middle">72%</text>
     <text x="94" y="238" fill="#a6adc8" font-size="12" text-anchor="middle">PWM 输出</text>
-    <text x="171" y="202" fill="#a6adc8" font-size="13" dominant-baseline="middle">转速</text>
-    <text x="329" y="174" fill="#a6adc8" font-size="11" text-anchor="end">RPM</text>
-    <text x="329" y="213" fill="#89dceb" font-size="35" font-weight="700" text-anchor="end">1464</text>
-    <line x1="171" y1="227" x2="344" y2="227" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="222" fill="#a6adc8" font-size="13">转速</text>
+    <text x="329" y="168" fill="#a6adc8" font-size="11" text-anchor="end">RPM</text>
+    <text x="329" y="222" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">1464</text>
+    <line x1="171" y1="239" x2="329" y2="239" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="249" fill="#a6adc8" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="257" fill="#a6e3a1" font-size="17" text-anchor="end">标准</text>
 
@@ -102,13 +104,13 @@
     <text x="32" y="338" fill="#cdd6f4" font-size="16" font-weight="700">CPU 风扇</text>
     <text x="344" y="337" fill="#a6adc8" font-size="12" text-anchor="end">CPU FAN · FAN 3</text>
     <circle cx="94" cy="420" r="58" fill="none" stroke="#45475a" stroke-width="11"/>
-    <circle cx="94" cy="420" r="58" fill="none" stroke="#89b4fa" stroke-width="11" stroke-linecap="round" stroke-dasharray="262 364" transform="rotate(-90 94 420)"/>
+    <circle cx="94" cy="420" r="58" fill="none" stroke="#fab387" stroke-width="11" stroke-linecap="round" stroke-dasharray="262 364" transform="rotate(-90 94 420)"/>
     <text x="94" y="424" fill="#cdd6f4" font-size="32" font-weight="700" text-anchor="middle">72%</text>
     <text x="94" y="449" fill="#a6adc8" font-size="12" text-anchor="middle">PWM 输出</text>
-    <text x="171" y="413" fill="#a6adc8" font-size="13" dominant-baseline="middle">转速</text>
-    <text x="329" y="385" fill="#a6adc8" font-size="11" text-anchor="end">RPM</text>
-    <text x="329" y="424" fill="#89dceb" font-size="35" font-weight="700" text-anchor="end">3994</text>
-    <line x1="171" y1="438" x2="344" y2="438" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="433" fill="#a6adc8" font-size="13">转速</text>
+    <text x="329" y="379" fill="#a6adc8" font-size="11" text-anchor="end">RPM</text>
+    <text x="329" y="433" fill="#89dceb" font-size="48" font-weight="700" text-anchor="end">3994</text>
+    <line x1="171" y1="450" x2="329" y2="450" stroke="#45475a" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="460" fill="#a6adc8" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="468" fill="#a6e3a1" font-size="17" text-anchor="end">标准</text>
 
@@ -153,6 +155,8 @@
     <rect x="279" y="679" width="65" height="23" rx="6" fill="#313244" stroke="#45475a" stroke-width="1"/>
     <circle cx="292" cy="690.5" r="3.5" fill="#a6adc8"/>
     <text x="305" y="695" fill="#a6adc8" font-size="12" font-weight="600">关闭</text>
+    <rect x="32" y="707" width="14" height="14" rx="3" fill="none" fill-opacity="0" stroke="#45475a" stroke-width="1" stroke-opacity="0"/>
+    <text x="54" y="718" fill="#a6adc8" font-size="12"></text>
     <rect x="32" y="733" width="100" height="52" rx="5" fill="#313244"/>
     <line x1="54" y1="757" x2="57" y2="755" stroke="#cdd6f4" stroke-width="1.5"/>
     <line x1="57" y1="755" x2="60" y2="755" stroke="#cdd6f4" stroke-width="1.5"/>
@@ -185,17 +189,19 @@
     <rect x="279" y="824" width="65" height="23" rx="6" fill="#313244" stroke="#45475a" stroke-width="1"/>
     <circle cx="292" cy="835.5" r="3.5" fill="#a6e3a1"/>
     <text x="305" y="840" fill="#a6e3a1" font-size="12" font-weight="600">3 / 3</text>
-    <rect x="32" y="878" width="100" height="52" rx="5" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <text x="188" y="883" fill="#a6adc8" font-size="14" text-anchor="middle"></text>
+    <text x="32" y="866" fill="#a6adc8" font-size="12"></text>
+    <rect x="32" y="878" width="100" height="52" rx="5" fill="#313244" fill-opacity="1" stroke="#45475a" stroke-width="1" stroke-opacity="1"/>
     <text x="82" y="899" fill="#cdd6f4" font-size="13" font-weight="600" text-anchor="middle">VM 100</text>
-    <circle cx="56" cy="916" r="3" fill="#a6e3a1"/>
+    <circle cx="56" cy="916" r="3" fill="#a6e3a1" fill-opacity="1"/>
     <text x="90" y="920" fill="#a6e3a1" font-size="12" text-anchor="middle">运行中</text>
-    <rect x="138" y="878" width="100" height="52" rx="5" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <rect x="138" y="878" width="100" height="52" rx="5" fill="#313244" fill-opacity="1" stroke="#45475a" stroke-width="1" stroke-opacity="1"/>
     <text x="188" y="899" fill="#cdd6f4" font-size="13" font-weight="600" text-anchor="middle">VM 111</text>
-    <circle cx="162" cy="916" r="3" fill="#a6e3a1"/>
+    <circle cx="162" cy="916" r="3" fill="#a6e3a1" fill-opacity="1"/>
     <text x="196" y="920" fill="#a6e3a1" font-size="12" text-anchor="middle">运行中</text>
-    <rect x="244" y="878" width="100" height="52" rx="5" fill="#313244" stroke="#45475a" stroke-width="1"/>
+    <rect x="244" y="878" width="100" height="52" rx="5" fill="#313244" fill-opacity="1" stroke="#45475a" stroke-width="1" stroke-opacity="1"/>
     <text x="294" y="899" fill="#cdd6f4" font-size="13" font-weight="600" text-anchor="middle">VM 200</text>
-    <circle cx="268" cy="916" r="3" fill="#a6e3a1"/>
+    <circle cx="268" cy="916" r="3" fill="#a6e3a1" fill-opacity="1"/>
     <text x="302" y="920" fill="#a6e3a1" font-size="12" text-anchor="middle">运行中</text>
 
   </g>
