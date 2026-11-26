@@ -70,7 +70,11 @@ for theme in ('mocha', 'latte'):
                     bar_tracks = set()
                     for node in list(group):
                         position = node.get('y', node.get('cy', node.get('y1', '0')))
-                        if 99 <= float(position) < 296:
+                        if (node.tag.endswith('}text') and node.get('x') == '20'
+                                and position in ('61', '74', '81')):
+                            # Only the two old identity rows / new uptime row changed.
+                            group.remove(node)
+                        elif 99 <= float(position) < 296:
                             group.remove(node)
                         elif (node.tag.endswith('}text') and float(position) >= 373
                               and int(float(position) - 375) % 118 in (0, 24, 30, 31, 116)):

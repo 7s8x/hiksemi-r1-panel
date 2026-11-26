@@ -74,6 +74,7 @@ def load_color(percent, warn, high):
 def information_values(data: dict) -> dict:
     """Format display fields without building an image or reading hardware."""
     values = _shared(data)
+    values.pop("PVE_VERSION")
     usage = _number(data.get("cpu_usage"))
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
     total = _number(data.get("mem_total"), 0, 10000)

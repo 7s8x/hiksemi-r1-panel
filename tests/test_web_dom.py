@@ -36,6 +36,22 @@ def canonical(root):
 
 
 class WebDomTests(unittest.TestCase):
+    def test_information_header_keeps_only_larger_uptime_below_title(self):
+        data = {**demo_data(), 'pve_version': 'PROXMOX VE 9.2.26',
+                'uptime': 3 * 86400 + 17 * 3600, 'clock': '12:13'}
+        values = information_values(data)
+        self.assertNotIn('PVE_VERSION', values)
+        for theme in ('mocha', 'latte'):
+            direct = ET.fromstring(render_information(data, theme=theme))
+            self.assertEqual(canonical(direct), canonical(applied('panel', values, theme)))
+            texts = {node.text: node for node in direct.iter() if node.tag.endswith('}text')}
+            self.assertNotIn(data['pve_version'], texts)
+            uptime = texts['运行 3 天 17 小时']
+            self.assertEqual((uptime.get('x'), uptime.get('y'), uptime.get('font-size')), ('20', '74', '18'))
+            self.assertEqual(texts['12:13'].get('y'), '80')
+            self.assertIn('在线', texts)
+        self.assertIn(data['pve_version'], render_fans(data).decode('utf-8'))
+
     def test_information_card_larger_readings_and_no_drive_model(self):
         for theme in ('mocha', 'latte'):
             data = {**demo_data(), 'storage_models': ['hidden-model'] * 5}
