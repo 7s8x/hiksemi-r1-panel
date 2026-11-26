@@ -97,7 +97,10 @@ for theme in ('mocha', 'latte'):
                 for group in root.iter():
                     for node in list(group):
                         position = node.get('y', node.get('cy', node.get('y1', '0')))
-                        if float(position) >= 521:
+                        if (node.tag.endswith('}text') and node.get('x') == '20'
+                                and position in ('61', '74', '81')):
+                            group.remove(node)
+                        elif float(position) >= 521:
                             group.remove(node)
                         elif (node.tag.endswith('}line') and node.get('y1') in ('227','239','438','450')
                               or node.tag.endswith('}text') and

@@ -50,7 +50,14 @@ class WebDomTests(unittest.TestCase):
             self.assertEqual((uptime.get('x'), uptime.get('y'), uptime.get('font-size')), ('20', '74', '18'))
             self.assertEqual(texts['12:13'].get('y'), '80')
             self.assertIn('在线', texts)
-        self.assertIn(data['pve_version'], render_fans(data).decode('utf-8'))
+            fan_data = fan_values(data)
+            self.assertNotIn('PVE_VERSION', fan_data)
+            fans = ET.fromstring(render_fans(data, theme=theme))
+            self.assertEqual(canonical(fans), canonical(applied('fans', fan_data, theme)))
+            fan_header = {n.text: n.attrib for n in fans.iter() if n.tag.endswith('}text')
+                          and n.get('y') and float(n.get('y')) < 99}
+            self.assertEqual(fan_header, {key: node.attrib for key, node in texts.items()
+                                          if node.get('y') and float(node.get('y')) < 99})
 
     def test_information_card_larger_readings_and_no_drive_model(self):
         for theme in ('mocha', 'latte'):

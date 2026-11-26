@@ -49,7 +49,6 @@ def _uptime(seconds) -> str:
 
 def _shared(data: dict) -> dict[str, object]:
     return {
-        "PVE_VERSION": data.get("pve_version") or "PROXMOX VE --",
         "UPTIME": _uptime(data.get("uptime")),
         "CLOCK": data.get("clock") if re.fullmatch(r"[0-2][0-9]:[0-5][0-9]", str(data.get("clock"))) else "--:--",
     }
@@ -74,7 +73,6 @@ def load_color(percent, warn, high):
 def information_values(data: dict) -> dict:
     """Format display fields without building an image or reading hardware."""
     values = _shared(data)
-    values.pop("PVE_VERSION")
     usage = _number(data.get("cpu_usage"))
     cpu_temp, cpu_unit = _temperature(data.get("cpu"))
     total = _number(data.get("mem_total"), 0, 10000)

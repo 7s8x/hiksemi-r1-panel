@@ -2,8 +2,7 @@
   <rect width="376" height="960" fill="#0b121b"/>
   <g font-family="PingFang SC, Noto Sans CJK SC, Arial, sans-serif">
     <text x="20" y="35" fill="#edf6f8" font-size="22" font-weight="700">HIKSEMI R1</text>
-    <text x="20" y="61" fill="#8fa6b4" font-size="12">{{PVE_VERSION}}</text>
-    <text x="20" y="81" fill="#75c4dc" font-size="11">{{UPTIME}}</text>
+    <text x="20" y="74" fill="#75c4dc" font-size="18" font-weight="700">{{UPTIME}}</text>
     <rect x="291" y="13" width="65" height="25" rx="6" fill="#17382f" stroke="#327861" stroke-width="1"/>
     <circle cx="304" cy="25.5" r="4" fill="#71d4b7"/>
     <text x="316" y="30" fill="#9ee8ce" font-size="12" font-weight="600">在线</text>
