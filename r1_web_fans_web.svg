@@ -2,8 +2,7 @@
   <rect width="376" height="960" fill="#0b121b"/>
   <g font-family="PingFang SC, Noto Sans CJK SC, Arial, sans-serif">
     <text x="20" y="35" fill="#edf6f8" font-size="22" font-weight="700">HIKSEMI R1</text>
-    <text x="20" y="61" fill="#8fa6b4" font-size="12">{{PVE_VERSION}}</text>
-    <text x="20" y="81" fill="#75c4dc" font-size="11">{{UPTIME}}</text>
+    <text x="20" y="74" fill="#75c4dc" font-size="18" font-weight="700">{{UPTIME}}</text>
     <rect x="291" y="13" width="65" height="25" rx="6" fill="#17382f" stroke="#327861" stroke-width="1"/>
     <circle cx="304" cy="25.5" r="4" fill="#71d4b7"/>
     <text x="316" y="30" fill="#9ee8ce" font-size="12" font-weight="600">在线</text>
@@ -16,10 +15,10 @@
     <circle cx="94" cy="209" r="58" fill="none" stroke="{{F2_ARC_COLOR}}" stroke-width="11" stroke-linecap="round" stroke-dasharray="{{F2_ARC}} 364" transform="rotate(-90 94 209)"/>
     <text x="94" y="213" fill="{{F2_OUTPUT_COLOR}}" font-size="32" font-weight="700" text-anchor="middle">{{F2_OUTPUT}}</text>
     <text x="94" y="238" fill="#9bb1be" font-size="12" text-anchor="middle">PWM 输出</text>
-    <text x="171" y="202" fill="#9bb1be" font-size="13" dominant-baseline="middle">转速</text>
-    <text x="329" y="174" fill="#9bb1be" font-size="11" text-anchor="end">{{F2_RPM_UNIT}}</text>
-    <text x="329" y="213" fill="{{F2_RPM_COLOR}}" font-size="{{F2_RPM_FONT}}" font-weight="700" text-anchor="end">{{F2_RPM}}</text>
-    <line x1="171" y1="227" x2="344" y2="227" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="222" fill="#9bb1be" font-size="13">转速</text>
+    <text x="329" y="168" fill="#9bb1be" font-size="11" text-anchor="end">{{F2_RPM_UNIT}}</text>
+    <text x="329" y="222" fill="{{F2_RPM_COLOR}}" font-size="{{F2_RPM_FONT}}" font-weight="700" text-anchor="end">{{F2_RPM}}</text>
+    <line x1="171" y1="239" x2="329" y2="239" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="249" fill="#9bb1be" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="257" fill="{{F2_STATUS_COLOR}}" font-size="17" text-anchor="end">{{F2_STATUS}}</text>
 
@@ -30,10 +29,10 @@
     <circle cx="94" cy="420" r="58" fill="none" stroke="{{F3_ARC_COLOR}}" stroke-width="11" stroke-linecap="round" stroke-dasharray="{{F3_ARC}} 364" transform="rotate(-90 94 420)"/>
     <text x="94" y="424" fill="{{F3_OUTPUT_COLOR}}" font-size="32" font-weight="700" text-anchor="middle">{{F3_OUTPUT}}</text>
     <text x="94" y="449" fill="#9bb1be" font-size="12" text-anchor="middle">PWM 输出</text>
-    <text x="171" y="413" fill="#9bb1be" font-size="13" dominant-baseline="middle">转速</text>
-    <text x="329" y="385" fill="#9bb1be" font-size="11" text-anchor="end">{{F3_RPM_UNIT}}</text>
-    <text x="329" y="424" fill="{{F3_RPM_COLOR}}" font-size="{{F3_RPM_FONT}}" font-weight="700" text-anchor="end">{{F3_RPM}}</text>
-    <line x1="171" y1="438" x2="344" y2="438" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
+    <text x="171" y="433" fill="#9bb1be" font-size="13">转速</text>
+    <text x="329" y="379" fill="#9bb1be" font-size="11" text-anchor="end">{{F3_RPM_UNIT}}</text>
+    <text x="329" y="433" fill="{{F3_RPM_COLOR}}" font-size="{{F3_RPM_FONT}}" font-weight="700" text-anchor="end">{{F3_RPM}}</text>
+    <line x1="171" y1="450" x2="329" y2="450" stroke="#3a5260" stroke-opacity="0.45" stroke-width="1"/>
     <text x="171" y="460" fill="#9bb1be" font-size="13" dominant-baseline="middle">状态</text>
     <text x="329" y="468" fill="{{F3_STATUS_COLOR}}" font-size="17" text-anchor="end">{{F3_STATUS}}</text>
 

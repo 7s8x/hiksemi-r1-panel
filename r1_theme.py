@@ -26,6 +26,7 @@ MOCHA = {
     "#9ab2c0": "#bac2de", "#9bb1be": "#a6adc8",
     "#9ee8ce": "#a6e3a1", "#edf6f8": "#cdd6f4",
     "#f4b46f": "#fab387", "#f5ad75": "#fab387",
+    "#f38ba8": "#f38ba8", "#74bffe": "#89b4fa",
 }
 
 LATTE = {'#0b121b': '#eff1f5', '#15232e': '#e6e9ef', '#17382f': '#dce0e8', '#244354': '#ccd0da', '#263845': '#ccd0da', '#2a4050': '#bcc0cc', '#327861': '#40a02b', '#344b57': '#bcc0cc', '#3a5260': '#acb0be', '#6bbfe5': '#ea76cb', '#71d4b7': '#8839ef', '#74bfff': '#ea76cb', '#75c4dc': '#8839ef', '#8fa6b4': '#6c6f85', '#9ab2c0': '#5c5f77', '#9bb1be': '#6c6f85', '#9ee8ce': '#4c4f69', '#edf6f8': '#4c4f69', '#f4b46f': '#fe640b', '#f5ad75': '#fe640b'}
@@ -37,6 +38,9 @@ def latte_svg(svg: bytes) -> bytes:
         tag = node.tag.rsplit("}", 1)[-1]
         for attr in ("fill", "stroke"):
             old = node.get(attr, "").lower()
+            if old in ("#74bffe", "#f38ba8"):
+                node.set(attr, "#1e66f5" if old == "#74bffe" else "#d20f39")
+                continue
             if old not in LATTE:
                 continue
             value = LATTE[old]

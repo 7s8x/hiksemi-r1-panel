@@ -36,6 +36,79 @@ def canonical(root):
 
 
 class WebDomTests(unittest.TestCase):
+    def test_information_header_keeps_only_larger_uptime_below_title(self):
+        data = {**demo_data(), 'pve_version': 'PROXMOX VE 9.2.26',
+                'uptime': 3 * 86400 + 17 * 3600, 'clock': '12:13'}
+        values = information_values(data)
+        self.assertNotIn('PVE_VERSION', values)
+        for theme in ('mocha', 'latte'):
+            direct = ET.fromstring(render_information(data, theme=theme))
+            self.assertEqual(canonical(direct), canonical(applied('panel', values, theme)))
+            texts = {node.text: node for node in direct.iter() if node.tag.endswith('}text')}
+            self.assertNotIn(data['pve_version'], texts)
+            uptime = texts['运行 3 天 17 小时']
+            self.assertEqual((uptime.get('x'), uptime.get('y'), uptime.get('font-size')), ('20', '74', '18'))
+            self.assertEqual(texts['12:13'].get('y'), '80')
+            self.assertIn('在线', texts)
+            fan_data = fan_values(data)
+            self.assertNotIn('PVE_VERSION', fan_data)
+            fans = ET.fromstring(render_fans(data, theme=theme))
+            self.assertEqual(canonical(fans), canonical(applied('fans', fan_data, theme)))
+            fan_header = {n.text: n.attrib for n in fans.iter() if n.tag.endswith('}text')
+                          and n.get('y') and float(n.get('y')) < 99}
+            self.assertEqual(fan_header, {key: node.attrib for key, node in texts.items()
+                                          if node.get('y') and float(node.get('y')) < 99})
+
+    def test_information_card_larger_readings_and_no_drive_model(self):
+        for theme in ('mocha', 'latte'):
+            data = {**demo_data(), 'storage_models': ['hidden-model'] * 5}
+            values = information_values(data)
+            self.assertEqual(values['MEM_FONT'], 25)
+            self.assertEqual((values['D1_TITLE'], values['D1_DETAIL']), ('BAY 1', '2TB SSD'))
+            svg = render_information(data, theme=theme)
+            self.assertNotIn(b'hidden-model', svg)
+            elements = list(ET.fromstring(svg).iter())
+            by_text = {n.text: n for n in elements if n.tag.endswith('}text') and n.text}
+            used = next(n for n in elements if n.get('x') == '42' and n.get('y') == '564')
+            self.assertEqual(by_text['BAY 1'].get('font-size'), used.get('font-size'))
+            self.assertEqual(by_text['2TB SSD'].get('font-size'), '30')
+            self.assertEqual(canonical(ET.fromstring(svg)), canonical(applied('panel', values, theme)))
+            values = information_values({**data, 'mem_used': 9999.9, 'mem_total': 10000})
+            self.assertLess(values['MEM_FONT'], 25)
+
+    def test_cpu_and_fan_rings_use_separate_load_thresholds(self):
+        cool, warm, hot = '#74bffe', '#f4b46f', '#f38ba8'
+        for percent, expected in ((59, cool), (60, warm), (84, warm), (85, hot)):
+            data = {**demo_data(), 'cpu_usage': percent}
+            self.assertEqual(information_values(data)['CPU_ARC_COLOR'], expected)
+            self.assertEqual(canonical(ET.fromstring(render_information(data, theme='mocha'))),
+                             canonical(applied('panel', information_values(data), 'mocha')))
+        for pwm, expected in ((176, cool), (179, warm), (226, warm), (230, hot), (255, hot)):
+            data = {**demo_data(), 'fans': {'pwm2': pwm, 'fan2_input': 1000, 'pwm3': 255, 'fan3_input': 0}}
+            values = fan_values(data)
+            self.assertEqual(values['F2_ARC_COLOR'], expected)
+            self.assertEqual(values['F3_ARC_COLOR'], warm)
+            self.assertEqual(values['F3_STATUS'], '停转')
+            self.assertEqual(canonical(ET.fromstring(render_fans(data, theme='latte'))),
+                             canonical(applied('fans', values, 'latte')))
+
+    def test_storage_capacity_bar_thresholds_and_theme_projection(self):
+        for theme, colors in (
+                ('mocha', ['#89b4fa', '#fab387', '#fab387', '#f38ba8']),
+                ('latte', ['#1e66f5', '#fe640b', '#fe640b', '#d20f39'])):
+            with self.subTest(theme=theme):
+                data = demo_data()
+                data.update(storage_usage=[74, 75, 89, 90, None], storage_capacity=[])
+                values = information_values(data)
+                direct = ET.fromstring(render_information(data, theme=theme))
+                self.assertEqual(canonical(direct), canonical(applied('panel', values, theme)))
+                bars = [n for n in direct.iter() if n.tag.endswith('}rect')
+                        and n.get('x') == '42' and n.get('height') == '6']
+                fills = bars[1::2]
+                self.assertEqual(len(fills), 5)
+                self.assertEqual([n.get('fill') for n in fills[:4]], colors)
+                self.assertEqual(fills[4].get('width'), '0')
+
     def test_vm_selection_http_auth_csrf_and_persistence(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), web.Handler)
         thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.01}, daemon=True)
@@ -70,6 +143,10 @@ class WebDomTests(unittest.TestCase):
                     self.assertFalse(path.exists())
                     self.assertEqual(send(write, {'vmids': [100, 200]})['selected'], [100, 200])
                     self.assertEqual(send(admin)['selected'], [100, 200])
+                    labels = {'100': {'mode': 'pve'}, '200': {'mode': 'id'}}
+                    self.assertEqual(send(write, {'vmids': [100, 200], 'labels': labels})['labels'], labels)
+                    denied(400, write, {'vmids': [100, 200], 'labels': {'200': {'mode': 'custom', 'name': '家庭助手'}}})
+                    self.assertEqual(send(admin)['labels'], labels)
                     read.return_value = {}
                     denied(503, write, {'vmids': []})
                     self.assertEqual(json.loads(path.read_text())['vmids'], [100, 200])
@@ -128,12 +205,26 @@ class WebDomTests(unittest.TestCase):
         try:
             with patch.object(web, 'PUBLIC_COLLECTOR', worker), patch.object(web, 'LOG_ENABLED', False), \
                  patch.dict(web.SESSIONS, {}, clear=True), patch.object(web, 'PUBLIC_READONLY', True):
+                frame['values']['fans'] = fan_values({'vms':[('VM 100','RUNNING')]})
+                frame['admin_fans'] = fan_values({'vms':[('VM 100','RUNNING')], 'vm_display_names':{'VM 100':'家庭助手'}})
+                private_url = f'http://127.0.0.1:{server.server_port}/api/display-state'
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(private_url, timeout=2)
+                self.assertEqual(denied.exception.code, 401)
+                denied.exception.close()
+                with patch.dict(web.SESSIONS, {'session':(time.time()+60, 'csrf')}):
+                    with urlopen(Request(private_url, headers={'Cookie':'r1session=session'}), timeout=2) as response:
+                        self.assertIn('家庭助手',json.load(response)['pages']['fans'])
                 for endpoint in ('state', 'layout'):
                     url = f'http://127.0.0.1:{server.server_port}/public/{endpoint}.json'
                     with urlopen(url, timeout=2) as response:
                         self.assertEqual(response.headers.get_content_type(), 'application/json')
                         self.assertIn('no-store', response.headers['Cache-Control'])
-                        self.assertEqual(json.load(response)['theme'], 'mocha')
+                        document = json.load(response)
+                        self.assertEqual(document['theme'], 'mocha')
+                        if endpoint == 'state':
+                            self.assertNotIn('家庭助手', document['pages']['fans'])
+                            self.assertIn('VM 100', document['pages']['fans'])
                     with patch.object(web, 'PUBLIC_READONLY', False):
                         with self.assertRaises(HTTPError) as error: urlopen(url, timeout=2)
                         self.assertEqual(error.exception.code, 401)
@@ -168,9 +259,14 @@ class WebDomTests(unittest.TestCase):
         root = applied('panel', information_values(data), 'mocha')
         self.assertEqual(canonical(root), canonical(ET.fromstring(render_information(data, theme='mocha'))))
         self.assertFalse(any(n.tag.endswith('script') for n in root.iter()))
-        memory = next(n for n in root.iter() if n.get('x') == '329' and n.get('y') == '250')
-        self.assertEqual(len(memory), 2)
+        memory = next(n for n in root.iter() if n.get('x') == '329' and n.get('y') == '260')
+        self.assertEqual(len(memory), 1)
         self.assertEqual(memory.text, '--')
+        suffix = memory[0]
+        self.assertEqual(suffix.text, ' / 15 GiB')
+        self.assertLess(int(suffix.get('font-size')), int(memory.get('font-size')))
+        for attr in ('y', 'dy', 'dominant-baseline', 'baseline-shift'):
+            self.assertIsNone(suffix.get(attr))
 
     def test_worker_formats_only_and_compatibility_svg_is_lazy(self):
         with patch.object(web, 'public_snapshot', return_value=demo_data()), \

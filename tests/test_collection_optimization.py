@@ -17,7 +17,7 @@ class CollectionOptimizationTests(unittest.TestCase):
         from tempfile import TemporaryDirectory
         with patch.object(shared, 'vm_inventory', return_value={100:"RUNNING", 111:"RUNNING", 200:"STOPPED"}) as query:
             payload = shared.collect_slow('vm', ())
-        query.assert_called_once_with()
+        query.assert_called_once_with({})
         record = {'schema': 1, 'boot': 'test', 'published_at': 100, 'groups': {
             'vm': {'valid': True, 'at': 100, 'interval': 60, 'data': json.loads(json.dumps(payload))}}}
         with TemporaryDirectory() as tmp:
@@ -27,9 +27,14 @@ class CollectionOptimizationTests(unittest.TestCase):
                 data = shared.decode_snapshot(record, now=100, boot='test')
                 self.assertEqual(data['vm_inventory'], [100, 111, 200])
                 self.assertEqual(data['vms'], [('VM 100','RUNNING'), ('VM 200','STOPPED')])
+                record['groups']['vm']['data']['names'] = {'100': 'Synology'}
+                selection.write_text('{"vmids":[100,200],"labels":{"100":{"mode":"pve"},"200":{"mode":"custom","name":"家庭助手"}}}')
+                data = shared.decode_snapshot(record, now=100, boot='test')
+                self.assertEqual(data['vm_display_names'], {'VM 100':'Synology'})
                 record['groups']['vm']['valid'] = False
                 data = shared.decode_snapshot(record, now=100, boot='test')
                 self.assertNotIn('vm_inventory', data)
+                self.assertNotIn('vm_display_names', data)
                 self.assertEqual(data['vms'], [('VM 100','UNKNOWN'), ('VM 200','UNKNOWN')])
                 selection.write_text('{"vmids":[]}')
                 self.assertEqual(shared.decode_snapshot(record, now=100, boot='test')['vms'], [])

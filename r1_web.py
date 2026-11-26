@@ -193,9 +193,11 @@ def atomic_json(path: Path, record: dict):
 
 
 def vm_monitor_settings():
-    inventory = read_snapshot().get("vm_inventory")
+    snapshot = read_snapshot()
+    inventory = snapshot.get("vm_inventory")
+    selected, labels = vm_monitor.monitor_config(SITE.vmids)
     return {"available": inventory is not None, "vmids": inventory or [],
-            "selected": list(vm_monitor.selected_vmids(SITE.vmids))}
+            "selected": list(selected), "names": snapshot.get("vm_names", {}), "labels": labels}
 
 
 def change_admin_password(current: str, new: str) -> None:
@@ -294,7 +296,7 @@ def capture_frame(state: str) -> bytes:
         return encoded
 
 
-def public_snapshot() -> dict:
+def public_snapshot(*, include_vm_names=False) -> dict:
     """Project only display fields; never expose the raw collector document."""
     source = read_snapshot()
     allowed = ('cpu', 'cpu_usage', 'nvme', 'drives', 'storage_models', 'storage_usage',
@@ -305,6 +307,8 @@ def public_snapshot() -> dict:
                        for identity, temp in source.get('storage', [])]
     data['vms'] = [(name if re.fullmatch(r'VM [0-9]+', str(name)) else 'VM --', status)
                    for name, status in source.get('vms', [])]
+    if include_vm_names:
+        data['vm_display_names'] = source.get('vm_display_names', {})
     data['clock'] = time.strftime('%H:%M')
     data['control'] = control_status()
     data['rgb'] = None
@@ -322,12 +326,15 @@ def public_snapshot() -> dict:
 
 def collect_public_frames() -> dict:
     """Format public display fields only; compatibility images are requested lazily."""
-    data = public_snapshot()
+    data = public_snapshot(include_vm_names=True)
+    private_names = data.pop('vm_display_names', {})
     freshness = data.get('freshness')
     if freshness is not None and not freshness.get('valid'):
         raise RuntimeError('shared display unavailable')
     frames = {"values": {"panel": information_values(data), "fans": fan_values(data)},
               "theme": load_theme()}
+    if private_names:
+        frames['admin_fans'] = fan_values({**data, 'vm_display_names': private_names})
     frames['groups'] = dict((freshness or {}).get('groups', {}))
     frames['updated'] = time.time()
     return frames
@@ -366,7 +373,7 @@ PUBLIC_DOCUMENT_LOCK = threading.Lock()
 PUBLIC_DOCUMENT_CACHE = None
 
 
-def projected_pages(frames, spec):
+def projected_pages(frames, spec, *, admin=False):
     """Keep only the latest projection; coalesce clients without caching health."""
     global PUBLIC_DOCUMENT_CACHE
     key = (spec['id'], frames['updated'])
@@ -375,17 +382,20 @@ def projected_pages(frames, spec):
             pages = {view: project(view, frames['values'][view], frames['theme'])
                      for view in ('panel', 'fans')}
             PUBLIC_DOCUMENT_CACHE = (key, pages)
-        return PUBLIC_DOCUMENT_CACHE[1]
+        pages = PUBLIC_DOCUMENT_CACHE[1]
+        if admin and 'admin_fans' in frames:
+            return {**pages, 'fans': project('fans', frames['admin_fans'], frames['theme'])}
+        return pages
 
 
-def public_document(include_layout=False):
+def public_document(include_layout=False, *, admin=False):
     frames = current_public_frame()
     theme = frames['theme']
     spec = document_layout(theme)
     if include_layout:
         return spec
     result = {'id': spec['id'], 'theme': theme,
-              'pages': projected_pages(frames, spec),
+              'pages': projected_pages(frames, spec, admin=admin),
               'valid_for': max(0, min(30, 45 - (time.time() - frames['updated'])))}
     # Recheck the in-memory worker after projection, without reading the file twice.
     # Every request, including cache hits, has already checked current group health.
@@ -524,7 +534,7 @@ class Handler(BaseHTTPRequestHandler):
             if not length.isascii() or not length.isdecimal() or len(length) > 5:
                 self.send_error(400, "invalid body length")
                 return False
-            if int(length) > 4096:
+            if int(length) > self._body_limit():
                 self.send_error(413, "body too large")
                 return False
             if self.command != "POST" and int(length) != 0:
@@ -652,9 +662,12 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError, AttributeError):
             return False
 
+    def _body_limit(self):
+        return 16384 if self.command == "POST" and urlsplit(self.path).path == "/api/vm-monitor" else 4096
+
     def _body(self):
         length = int(self.headers.get("Content-Length", "0"))
-        if not 0 < length <= 4096:
+        if not 0 < length <= self._body_limit():
             raise ValueError("invalid body length")
         payload = self.rfile.read(length)
         if len(payload) != length:
@@ -725,6 +738,11 @@ class Handler(BaseHTTPRequestHandler):
             with VM_MONITOR_LOCK:
                 settings = vm_monitor_settings()
             self._json(200, settings)
+        elif path == "/api/display-state":
+            try:
+                self._json(200, public_document(admin=True))
+            except (OSError, RuntimeError, ValueError, TypeError, KeyError):
+                self._json(503, {"error": "display unavailable"})
         elif path == "/api/frame.png":
             panel = read_state()
             if panel is None:
@@ -814,7 +832,7 @@ class Handler(BaseHTTPRequestHandler):
                     save_theme(body["theme"])
                 self._json(200, {"ok": True, "theme": load_theme()})
             elif path == "/api/vm-monitor":
-                if not isinstance(body, dict) or set(body) != {"vmids"}:
+                if not isinstance(body, dict) or set(body) not in ({"vmids"}, {"vmids", "labels"}):
                     raise ValueError("invalid VM request")
                 selection = vm_monitor.validate_selection(body["vmids"])
                 with VM_MONITOR_LOCK:
@@ -822,11 +840,13 @@ class Handler(BaseHTTPRequestHandler):
                     if not settings["available"]:
                         self._json(503, {"error": "虚拟机清单暂不可用，请刷新后重试"})
                         return
-                    if not set(selection) <= set(settings["vmids"] + settings["selected"]):
+                    labels = vm_monitor.validate_labels(body.get("labels", settings["labels"]))
+                    allowed = set(settings["vmids"] + settings["selected"])
+                    if not set(selection) <= allowed or not set(labels) <= {str(v) for v in allowed} | set(settings["labels"]):
                         self._json(400, {"error": "虚拟机清单已变化，请刷新后重试"})
                         return
-                    atomic_json(vm_monitor.SELECTION_FILE, {"vmids": list(selection)})
-                self._json(200, {"ok": True, **settings, "selected": list(selection)})
+                    atomic_json(vm_monitor.SELECTION_FILE, {"vmids": list(selection), "labels": labels})
+                self._json(200, {"ok": True, **settings, "selected": list(selection), "labels": labels})
             elif path == "/api/panel":
                 if not isinstance(body, dict) or set(body) != {"action", "value"}:
                     raise ValueError("invalid panel command")
